@@ -16,6 +16,7 @@ const app = Vue.createApp({
         preliminary: true,
         points: [],
       },
+      selectedSurface: 'FOREST_TRAIL',
       segments: [],
       routeName: 'Черновик маршрута',
       status: 'PRELIMINARY',
@@ -120,7 +121,7 @@ const app = Vue.createApp({
     resetSegment() {
       this.currentSegment = {
         name: 'Участок ' + (this.segments.length + 1),
-        surfaceType: 'FOREST_TRAIL',
+        surfaceType: this.selectedSurface,
         preliminary: true,
         points: [],
       };
@@ -149,6 +150,12 @@ const app = Vue.createApp({
       }
     },
 
+    setSurfaceType(type) {
+      this.selectedSurface = type;
+      this.currentSegment.surfaceType = type;
+      this.pushHistory();
+    },
+
     handleStatusChange(status) {
       if (this.restoring) return;
       if (status === 'FINAL') {
@@ -175,7 +182,7 @@ const app = Vue.createApp({
     finalizeCurrentSegment() {
       if (this.currentSegment.points.length) {
         this.segments.push({ ...this.currentSegment, id: this.currentSegment.id || crypto.randomUUID() });
-        this.currentSegment = { name: 'Новый участок', surfaceType: 'FOREST_TRAIL', preliminary: true, points: [] };
+        this.currentSegment = { name: 'Новый участок', surfaceType: this.selectedSurface, preliminary: true, points: [] };
         this.activePolyline.setLatLngs([]);
         this.clearActiveMarkers();
         this.drawSegments();
@@ -327,7 +334,8 @@ const app = Vue.createApp({
       this.routeName = loaded.name;
       this.status = loaded.status;
       this.segments = loaded.segments;
-      this.currentSegment = { name: 'Новый участок', surfaceType: 'FOREST_TRAIL', preliminary: true, points: [] };
+      this.selectedSurface = 'FOREST_TRAIL';
+      this.currentSegment = { name: 'Новый участок', surfaceType: this.selectedSurface, preliminary: true, points: [] };
       this.metrics = response.data.metrics;
       this.activePolyline.setLatLngs([]);
       this.clearActiveMarkers();
@@ -440,6 +448,7 @@ const app = Vue.createApp({
         currentSegment: this.cloneSegment(this.currentSegment),
         status: this.status,
         routeName: this.routeName,
+        selectedSurface: this.selectedSurface,
       };
     },
 
@@ -449,6 +458,7 @@ const app = Vue.createApp({
       this.currentSegment = this.cloneSegment(state.currentSegment);
       this.status = state.status;
       this.routeName = state.routeName;
+      this.selectedSurface = state.selectedSurface || this.selectedSurface;
       this.restoring = false;
       this.activePolyline.setLatLngs(this.currentSegment.points.map(p => [p.lat, p.lng]));
       this.redrawActiveMarkers();
