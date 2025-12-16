@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Майская прогулка — маршруты</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">
+    <strong>МАЙСКАЯ ПРОГУЛКА</strong>
+  </div>
+  <button class="top-btn">Загрузить маршрут</button>
+</header>
+
+<div class="layout">
+  <!-- ЛЕВАЯ ПАНЕЛЬ -->
+  <aside class="sidebar">
+    <section>
+      <h4>Режим</h4>
+      <label><input type="radio" name="mode" checked> Свободный</label>
+      <label><input type="radio" name="mode"> Точечный</label>
+    </section>
+
+    <section>
+      <h4>Привязка</h4>
+      <label><input type="checkbox"> К дорогам</label>
+      <label><input type="checkbox"> К архиву</label>
+    </section>
+
+    <section>
+      <h4>О текущем маршруте</h4>
+      <div class="info">
+        <div>Статус: <strong>Предварительный</strong></div>
+        <div>Протяжённость: <span id="distance">0</span> км</div>
+        <div>Время: 0 мин</div>
+      </div>
+    </section>
+
+    <section>
+      <h4>Детали покрытия</h4>
+      <div class="info">
+        Асфальт: 0 км<br/>
+        Лесная тропа: 0 км<br/>
+        Полевой путь: 0 км
+      </div>
+    </section>
+
+    <button class="btn">Сохранить</button>
+    <button class="btn secondary">Экспортировать</button>
+  </aside>
+
+  <!-- КАРТА -->
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/map.js"></script>
+</body>
+</html>
