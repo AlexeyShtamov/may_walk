@@ -41,24 +41,30 @@ const app = Vue.createApp({
       restoring: false,
     };
   },
+
   mounted() {
     this.map = L.map('map').setView([56.8389, 60.6057], 11);
     this.baseLayer = this.createTileLayer(this.tileLayer).addTo(this.map);
 
     this.activePolyline = L.polyline([], { color: '#d32f2f', weight: 4 }).addTo(this.map);
+
     this.map.on('click', this.handleMapClick);
     this.map.on('mousedown', this.handleMouseDown);
     this.map.on('mousemove', this.handleMouseMove);
     this.map.on('mouseup', this.handleMouseUp);
+
     this.updateMapInteraction();
+
     this.loadRoutes();
     this.pushHistory();
   },
+
   watch: {
     status(newStatus) {
       this.handleStatusChange(newStatus);
     },
   },
+
   methods: {
     createTileLayer(key) {
       const providers = {
@@ -145,6 +151,7 @@ const app = Vue.createApp({
 
     handleStatusChange(status) {
       if (this.restoring) return;
+
       if (status === 'FINAL') {
         this.finalizeCurrentSegment();
         this.markSegmentsFinal();
@@ -159,6 +166,7 @@ const app = Vue.createApp({
         }
         this.updateMetricsDraft();
       }
+
       this.pushHistory();
     },
 
@@ -178,12 +186,14 @@ const app = Vue.createApp({
 
     async handleMapClick(e) {
       if (this.mode === 'pan') return;
+
       if (this.mode === 'free') {
         if (this.skipNextClick) {
           this.skipNextClick = false;
           return;
         }
       }
+
       this.addPointToCurrent(e.latlng);
     },
 
@@ -198,6 +208,7 @@ const app = Vue.createApp({
           chosenPoint = L.latLng(candidate.point.lat, candidate.point.lng);
         }
       }
+
       this.currentSegment.points.push({ lat: chosenPoint.lat, lng: chosenPoint.lng, node: false });
       this.activePolyline.setLatLngs(this.currentSegment.points.map(p => [p.lat, p.lng]));
       this.redrawActiveMarkers();
@@ -214,14 +225,15 @@ const app = Vue.createApp({
 
     async handleMouseMove(e) {
       if (!this.isDrawing || this.mode !== 'free') return;
+
       const last = this.currentSegment.points[this.currentSegment.points.length - 1];
       const latlng = e.latlng;
+
       if (last) {
         const lastLatLng = L.latLng(last.lat, last.lng);
-        if (lastLatLng.distanceTo(latlng) < this.freeDrawMinDistance) {
-          return;
-        }
+        if (lastLatLng.distanceTo(latlng) < this.freeDrawMinDistance) return;
       }
+
       await this.addPointToCurrent(latlng);
     },
 
@@ -274,11 +286,13 @@ const app = Vue.createApp({
       this.clearRenderedSegments();
       this.status = 'PRELIMINARY';
       this.restoring = false;
+
       this.allowAddPoints = true;
       this.setMode('point');
       this.snapToArchive = true;
       this.snapToRoads = false;
       this.showOldRoutes = false;
+
       this.updateMapInteraction();
       this.undoStack = [];
       this.redoStack = [];
@@ -318,18 +332,23 @@ const app = Vue.createApp({
       this.restoring = true;
       const response = await api.get(`/routes/${this.selectedRouteId}`);
       const loaded = response.data.route;
+
       this.routeName = loaded.name;
       this.status = loaded.status;
       this.segments = loaded.segments;
       this.currentSegment = { name: 'Новый участок', surfaceType: 'UNKNOWN', preliminary: true, points: [] };
       this.metrics = response.data.metrics;
+
       this.activePolyline.setLatLngs([]);
       this.clearActiveMarkers();
       this.drawSegments();
+
       this.undoStack = [];
       this.redoStack = [];
+
       this.allowAddPoints = this.status !== 'FINAL';
       this.setMode(this.allowAddPoints ? 'point' : 'pan');
+
       this.restoring = false;
       this.updateMapInteraction();
       this.notice = '';
@@ -339,27 +358,32 @@ const app = Vue.createApp({
     drawSegments() {
       if (!this.map) return;
       this.clearRenderedSegments();
+
       this.segments.forEach(segment => {
         const color = segment.preliminary ? '#ffa726' : '#1976d2';
         const polyline = L.polyline(segment.points.map(p => [p.lat, p.lng]), {
           color,
           weight: 4,
         }).addTo(this.map);
+
         const markers = this.createPointMarkers(segment.points, color);
         markers.forEach(m => m.addTo(this.map));
+
         this.drawnSegments.push({ line: polyline, markers });
       });
     },
 
     createPointMarkers(points, color) {
       const radius = 4;
-      return points.map(p => L.circleMarker([p.lat, p.lng], {
-        radius,
-        color,
-        weight: 2,
-        fillColor: color,
-        fillOpacity: 0.85,
-      }));
+      return points.map(p =>
+        L.circleMarker([p.lat, p.lng], {
+          radius,
+          color,
+          weight: 2,
+          fillColor: color,
+          fillOpacity: 0.85,
+        })
+      );
     },
 
     redrawActiveMarkers() {
@@ -439,14 +463,18 @@ const app = Vue.createApp({
 
     applySnapshot(state) {
       this.restoring = true;
+
       this.segments = this.cloneSegments(state.segments);
       this.currentSegment = this.cloneSegment(state.currentSegment);
       this.status = state.status;
       this.routeName = state.routeName;
+
       this.restoring = false;
+
       this.activePolyline.setLatLngs(this.currentSegment.points.map(p => [p.lat, p.lng]));
       this.redrawActiveMarkers();
       this.drawSegments();
+
       this.allowAddPoints = this.status !== 'FINAL';
       if (!this.allowAddPoints && this.mode !== 'pan') {
         this.setMode('pan');
@@ -455,6 +483,7 @@ const app = Vue.createApp({
       } else {
         this.updateMapInteraction();
       }
+
       if (this.status === 'FINAL') {
         this.refreshMetricsFromBackend();
       } else {
@@ -488,7 +517,7 @@ const app = Vue.createApp({
       const dLat = (lat2 - lat1) * Math.PI / 180;
       const dLon = (lon2 - lon1) * Math.PI / 180;
       const a = Math.sin(dLat / 2) ** 2
-          + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+        + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     },
 
