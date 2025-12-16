@@ -81,18 +81,6 @@
       </section>
 
       <section class="panel">
-        <div class="panel__header">Покрытие участка</div>
-        <div class="panel__content">
-          <select class="input" :disabled="status === 'FINAL'" v-model="selectedSurface" @change="setSurfaceType($event.target.value)">
-            <option value="ASPHALT">Асфальт</option>
-            <option value="FOREST_TRAIL">Лесная тропа</option>
-            <option value="FIELD_PATH">Полевой путь</option>
-            <option value="RAILWAY">Ж/Д</option>
-          </select>
-        </div>
-      </section>
-
-      <section class="panel">
         <div class="panel__header">Имя маршрута</div>
         <div class="panel__content panel__content--stacked">
           <input v-if="status === 'PRELIMINARY'" v-model="routeName" class="input" placeholder="Введите имя" />
