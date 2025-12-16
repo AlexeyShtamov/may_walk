@@ -9,6 +9,7 @@ const app = Vue.createApp({
       drawnSegments: [],
       allowAddPoints: true,
       activePolyline: null,
+      activeMarkers: [],
       currentSegment: {
         name: 'Новый участок',
         surfaceType: 'FOREST_TRAIL',
@@ -26,7 +27,7 @@ const app = Vue.createApp({
       selectedRouteId: null,
       loading: false,
       notice: '',
-      mode: 'free',
+      mode: 'point',
       showOldRoutes: false,
       focusOnRoute: false,
       coverageMode: 'none',
@@ -36,6 +37,10 @@ const app = Vue.createApp({
         field: true,
         rail: true,
       },
+
+      isDrawing: false,
+      skipNextClick: false,
+      freeDrawMinDistance: 8,
     };
   },
   mounted() {
@@ -44,6 +49,10 @@ const app = Vue.createApp({
 
     this.activePolyline = L.polyline([], { color: '#d32f2f', weight: 4 }).addTo(this.map);
     this.map.on('click', this.handleMapClick);
+    this.map.on('mousedown', this.handleMouseDown);
+    this.map.on('mousemove', this.handleMouseMove);
+    this.map.on('mouseup', this.handleMouseUp);
+    this.updateMapInteraction();
     this.loadRoutes();
   },
   methods: {
@@ -103,19 +112,46 @@ const app = Vue.createApp({
         points: [],
       };
       this.activePolyline.setLatLngs([]);
+      this.clearActiveMarkers();
     },
 
-    togglePointMode() {
-      this.allowAddPoints = !this.allowAddPoints;
-      this.notice = this.allowAddPoints ? 'Режим добавления точек включён' : 'Добавление точек временно отключено';
+    setMode(newMode) {
+      const allowed = ['point', 'free', 'pan'];
+      if (!allowed.includes(newMode)) return;
+      this.mode = newMode;
+      this.isDrawing = false;
+      this.skipNextClick = false;
+      this.updateMapInteraction();
+    },
+
+    updateMapInteraction() {
+      if (!this.map) return;
+      if (this.mode === 'pan') {
+        this.map.dragging.enable();
+        this.map.keyboard.enable();
+      } else {
+        this.map.dragging.disable();
+        this.map.keyboard.disable();
+      }
     },
 
     async handleMapClick(e) {
+      if (this.mode === 'pan') return;
+      if (this.mode === 'free') {
+        if (this.skipNextClick) {
+          this.skipNextClick = false;
+          return;
+        }
+      }
+      this.addPointToCurrent(e.latlng);
+    },
+
+    async addPointToCurrent(latlng) {
       if (!this.allowAddPoints) return;
 
-      let chosenPoint = e.latlng;
+      let chosenPoint = latlng;
       if (this.snapToArchive) {
-        const candidate = await this.searchNearest(e.latlng);
+        const candidate = await this.searchNearest(latlng);
         if (candidate) {
           this.notice = `Привязали к архивному маршруту: ${candidate.routeName}`;
           chosenPoint = L.latLng(candidate.point.lat, candidate.point.lng);
@@ -123,7 +159,33 @@ const app = Vue.createApp({
       }
       this.currentSegment.points.push({ lat: chosenPoint.lat, lng: chosenPoint.lng, node: false });
       this.activePolyline.setLatLngs(this.currentSegment.points.map(p => [p.lat, p.lng]));
+      this.redrawActiveMarkers();
       this.updateMetricsDraft();
+    },
+
+    async handleMouseDown(e) {
+      if (!this.allowAddPoints || this.mode !== 'free') return;
+      this.isDrawing = true;
+      this.skipNextClick = true;
+      await this.addPointToCurrent(e.latlng);
+    },
+
+    async handleMouseMove(e) {
+      if (!this.isDrawing || this.mode !== 'free') return;
+      const last = this.currentSegment.points[this.currentSegment.points.length - 1];
+      const latlng = e.latlng;
+      if (last) {
+        const lastLatLng = L.latLng(last.lat, last.lng);
+        if (lastLatLng.distanceTo(latlng) < this.freeDrawMinDistance) {
+          return;
+        }
+      }
+      await this.addPointToCurrent(latlng);
+    },
+
+    handleMouseUp() {
+      if (this.mode !== 'free') return;
+      this.isDrawing = false;
     },
 
     async searchNearest(latlng) {
@@ -151,7 +213,10 @@ const app = Vue.createApp({
     },
 
     clearRenderedSegments() {
-      this.drawnSegments.forEach(layer => this.map.removeLayer(layer));
+      this.drawnSegments.forEach(entry => {
+        this.map.removeLayer(entry.line);
+        entry.markers.forEach(marker => this.map.removeLayer(marker));
+      });
       this.drawnSegments = [];
     },
 
@@ -197,6 +262,7 @@ const app = Vue.createApp({
       this.currentSegment = { name: 'Новый участок', surfaceType: 'FOREST_TRAIL', preliminary: true, points: [] };
       this.metrics = response.data.metrics;
       this.activePolyline.setLatLngs([]);
+      this.clearActiveMarkers();
       this.drawSegments();
     },
 
@@ -204,12 +270,37 @@ const app = Vue.createApp({
       if (!this.map) return;
       this.clearRenderedSegments();
       this.segments.forEach(segment => {
+        const color = segment.preliminary ? '#ffa726' : '#1976d2';
         const polyline = L.polyline(segment.points.map(p => [p.lat, p.lng]), {
-          color: segment.preliminary ? '#ffa726' : '#1976d2',
+          color,
           weight: 4,
         }).addTo(this.map);
-        this.drawnSegments.push(polyline);
+        const markers = this.createPointMarkers(segment.points, color);
+        markers.forEach(m => m.addTo(this.map));
+        this.drawnSegments.push({ line: polyline, markers });
       });
+    },
+
+    createPointMarkers(points, color) {
+      const radius = 4;
+      return points.map(p => L.circleMarker([p.lat, p.lng], {
+        radius,
+        color,
+        weight: 2,
+        fillColor: color,
+        fillOpacity: 0.85,
+      }));
+    },
+
+    redrawActiveMarkers() {
+      this.clearActiveMarkers();
+      this.activeMarkers = this.createPointMarkers(this.currentSegment.points, '#d32f2f');
+      this.activeMarkers.forEach(m => m.addTo(this.map));
+    },
+
+    clearActiveMarkers() {
+      this.activeMarkers.forEach(marker => this.map.removeLayer(marker));
+      this.activeMarkers = [];
     },
 
     updateMetricsDraft() {
