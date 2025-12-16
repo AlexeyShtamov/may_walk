@@ -94,10 +94,10 @@
         <div class="stat-divider"></div>
         <div class="coverage-block" :class="{ 'coverage-block--highlight': status === 'FINAL' }">
           <div class="stat-heading">📊 Детали покрытия:</div>
-          <div class="stat-line">Асфальт: <span class="stat-value">{{ status === 'FINAL' ? (metrics?.bySurface?.ASPHALT || 0) : 0 }} км</span></div>
-          <div class="stat-line">Лесная тропа: <span class="stat-value">{{ status === 'FINAL' ? (metrics?.bySurface?.FOREST_TRAIL || 0) : 0 }} км</span></div>
-          <div class="stat-line">Полевой путь: <span class="stat-value">{{ status === 'FINAL' ? (metrics?.bySurface?.FIELD_PATH || 0) : 0 }} км</span></div>
-          <div class="stat-line">Ж/Д: <span class="stat-value">{{ status === 'FINAL' ? (metrics?.bySurface?.RAILWAY || 0) : 0 }} км</span></div>
+          <div class="stat-line">Асфальт: <span class="stat-value">{{ surfaceLabel('ASPHALT') }}</span></div>
+          <div class="stat-line">Лесная тропа: <span class="stat-value">{{ surfaceLabel('FOREST_TRAIL') }}</span></div>
+          <div class="stat-line">Полевой путь: <span class="stat-value">{{ surfaceLabel('FIELD_PATH') }}</span></div>
+          <div class="stat-line">Ж/Д: <span class="stat-value">{{ surfaceLabel('RAILWAY') }}</span></div>
         </div>
         <div class="stat-divider"></div>
         <div class="stat-line">Черновик: <span class="stat-value">{{ metrics?.preliminaryKm || 0 }} км</span></div>
