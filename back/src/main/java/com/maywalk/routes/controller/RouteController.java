@@ -44,7 +44,7 @@ public class RouteController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<RouteResponse> get(@PathVariable UUID id) {
+    public ResponseEntity<RouteResponse> get(@PathVariable("id") UUID id) {
         return routeService.findById(id)
                 .map(route -> ResponseEntity.ok(new RouteResponse(route, routeService.buildMetrics(route))))
                 .orElse(ResponseEntity.notFound().build());
@@ -58,7 +58,7 @@ public class RouteController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<RouteResponse> update(@PathVariable UUID id, @RequestBody @Validated UpdateRouteRequest request) {
+    public ResponseEntity<RouteResponse> update(@PathVariable("id") UUID id, @RequestBody @Validated UpdateRouteRequest request) {
         Optional<Route> existing = routeService.findById(id);
         if (existing.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -72,7 +72,7 @@ public class RouteController {
     }
 
     @PostMapping("/{id}/points")
-    public ResponseEntity<GeoPoint> addPoint(@PathVariable UUID id, @RequestBody @Validated AddPointRequest request) {
+    public ResponseEntity<GeoPoint> addPoint(@PathVariable("id") UUID id, @RequestBody @Validated AddPointRequest request) {
         GeoPoint point = new GeoPoint(request.getLat(), request.getLng(), request.isNode());
         return routeService.addPoint(id, request.getSegmentId(), point)
                 .map(ResponseEntity::ok)
@@ -95,7 +95,7 @@ public class RouteController {
     }
 
     @PostMapping("/{id}/status")
-    public ResponseEntity<RouteResponse> status(@PathVariable UUID id, @RequestBody RouteStatus status) {
+    public ResponseEntity<RouteResponse> status(@PathVariable("id") UUID id, @RequestBody RouteStatus status) {
         return routeService.findById(id)
                 .map(route -> {
                     route.setStatus(status);
@@ -106,7 +106,7 @@ public class RouteController {
     }
 
     @GetMapping("/{id}/export/gpx")
-    public ResponseEntity<String> exportGpx(@PathVariable UUID id) {
+    public ResponseEntity<String> exportGpx(@PathVariable("id") UUID id) {
         return routeService.findById(id)
                 .map(route -> ResponseEntity.ok()
                         .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=route-" + route.getId() + ".gpx")
@@ -116,7 +116,7 @@ public class RouteController {
     }
 
     @GetMapping("/{id}/export/kml")
-    public ResponseEntity<String> exportKml(@PathVariable UUID id) {
+    public ResponseEntity<String> exportKml(@PathVariable("id") UUID id) {
         return routeService.findById(id)
                 .map(route -> ResponseEntity.ok()
                         .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=route-" + route.getId() + ".kml")
@@ -126,19 +126,20 @@ public class RouteController {
     }
 
     @GetMapping("/{id}/export/kmz")
-    public ResponseEntity<byte[]> exportKmz(@PathVariable UUID id) throws IOException {
+    public ResponseEntity<byte[]> exportKmz(@PathVariable("id") UUID id) {
         return routeService.findById(id)
                 .map(route -> {
                     try {
                         return ResponseEntity.ok()
-                                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=route-" + route.getId() + ".kmz")
+                                .header(HttpHeaders.CONTENT_DISPOSITION,
+                                        "attachment; filename=route-" + route.getId() + ".kmz")
                                 .contentType(MediaType.parseMediaType("application/vnd.google-earth.kmz"))
                                 .body(routeService.exportKmz(route));
                     } catch (IOException e) {
-                        return ResponseEntity.internalServerError().build();
+                        return ResponseEntity.internalServerError().<byte[]>build();
                     }
                 })
-                .orElse(ResponseEntity.notFound().build());
+                .orElse(ResponseEntity.notFound().<byte[]>build());
     }
 
     @PostMapping("/import/gpx")
