@@ -18,7 +18,6 @@
     <div class="topbar__left">
       <span class="logo-mark">логотип</span>
       <div class="title">
-        <span class="title__icon"><i class="fa-solid fa-circle"></i></span>
         <span class="title__text">МАЙСКАЯ ПРОГУЛКА</span>
       </div>
     </div>
@@ -47,17 +46,12 @@
           <label class="checkbox"><input type="checkbox" v-model="snapToRoads" disabled /> По дорогам</label>
           <label class="checkbox"><input type="checkbox" v-model="snapToArchive" /> К архиву</label>
         </div>
-        <div class="panel__content">
-          <div class="panel__label">Вдоль маршрут (расстояние до него) — {{ archiveThreshold }} м</div>
-          <input type="range" min="10" max="120" v-model.number="archiveThreshold" />
-        </div>
       </section>
 
       <section class="panel">
         <div class="panel__header">Отображение</div>
         <div class="panel__content">
           <label class="checkbox"><input type="checkbox" v-model="showOldRoutes" /> Показывать старые маршруты</label>
-          <label class="checkbox"><input type="checkbox" v-model="focusOnRoute" /> От текущего маршруте</label>
         </div>
         <div class="tile-switcher">
           <button class="tile-btn" :class="{ active: tileLayer === 'osm' }" @click="setTile('osm')" title="OSM"><i class="fa-solid fa-earth-europe"></i></button>
@@ -70,26 +64,12 @@
       </section>
 
       <section class="panel">
-        <div class="panel__header">Путь</div>
-        <div class="panel__row buttons">
-          <button class="secondary-btn" @click="togglePointMode"><i class="fa-solid fa-plus"></i> Добавить точку</button>
-          <button class="secondary-btn" disabled><i class="fa-solid fa-up-down-left-right"></i> Переставить точки</button>
-          <button class="secondary-btn" @click="clearRoute"><i class="fa-solid fa-trash"></i> Очистить маршрут</button>
-        </div>
-        <div class="panel__content panel__content--stacked">
-          <label class="radio"><input type="radio" value="none" v-model="coverageMode" /> Без учета покрытия</label>
-          <label class="radio"><input type="radio" value="use" v-model="coverageMode" /> Использовать покрытия</label>
-          <label class="radio"><input type="radio" value="view" v-model="coverageMode" /> Просмотр очков</label>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel__header">Детали покрытия</div>
-        <div class="panel__content panel__content--stacked">
-          <label class="checkbox"><input type="checkbox" v-model="surfaces.asphalt" /> Асфальт: {{ metrics?.bySurface?.ASPHALT || 0 }} км</label>
-          <label class="checkbox"><input type="checkbox" v-model="surfaces.trail" /> Лесная тропа: {{ metrics?.bySurface?.FOREST_TRAIL || 0 }} км</label>
-          <label class="checkbox"><input type="checkbox" v-model="surfaces.field" /> Полевой путь: {{ metrics?.bySurface?.FIELD_PATH || 0 }} км</label>
-          <label class="checkbox"><input type="checkbox" v-model="surfaces.rail" /> Ж/Д: {{ metrics?.bySurface?.RAILWAY || 0 }} км</label>
+        <div class="panel__header">Статус</div>
+        <div class="panel__content">
+          <select v-model="status" class="input">
+            <option value="PRELIMINARY">Предварительный</option>
+            <option value="FINAL">Окончательный</option>
+          </select>
         </div>
       </section>
 
@@ -107,9 +87,7 @@
       <div class="panel actions">
         <button class="primary-btn" @click="saveRoute" :disabled="loading">Сохранить</button>
         <div class="export-group">
-          <button class="secondary-btn" @click="exportRoute('gpx')">Экспортировать GPX</button>
-          <button class="secondary-btn" @click="exportRoute('kml')">Экспортировать KML</button>
-          <button class="secondary-btn" @click="exportRoute('kmz')">Экспортировать KMZ</button>
+          <button class="secondary-btn" @click="exportRoute('gpx')">Экспортировать</button>
         </div>
       </div>
 

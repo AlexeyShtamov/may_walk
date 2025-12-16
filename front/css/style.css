@@ -233,3 +233,12 @@ body {
   text-decoration: none;
   color: #666;
 }
+
+.input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #bcbcbc;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 14px;
+}
