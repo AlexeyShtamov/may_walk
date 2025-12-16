@@ -8,8 +8,10 @@ import com.maywalk.routes.model.SurfaceType;
 public class RouteMetrics {
     private double totalKm;
     private double preliminaryKm;
+    private double finalKm;
     private Map<SurfaceType, Double> bySurface = new EnumMap<>(SurfaceType.class);
     private double estimatedMinutes;
+    private boolean coverageFallback;
 
     public RouteMetrics() {
     }
@@ -44,5 +46,21 @@ public class RouteMetrics {
 
     public void setEstimatedMinutes(double estimatedMinutes) {
         this.estimatedMinutes = estimatedMinutes;
+    }
+
+    public double getFinalKm() {
+        return finalKm;
+    }
+
+    public void setFinalKm(double finalKm) {
+        this.finalKm = finalKm;
+    }
+
+    public boolean isCoverageFallback() {
+        return coverageFallback;
+    }
+
+    public void setCoverageFallback(boolean coverageFallback) {
+        this.coverageFallback = coverageFallback;
     }
 }

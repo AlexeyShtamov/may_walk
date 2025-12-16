@@ -3,7 +3,6 @@ package com.maywalk.routes.service;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -17,6 +16,8 @@ import java.util.zip.ZipOutputStream;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
@@ -33,6 +34,8 @@ import com.maywalk.routes.util.GeoUtils;
 @Service
 public class RouteService {
     private final Map<UUID, Route> routes = new ConcurrentHashMap<>();
+    private final Map<UUID, RouteHistory> histories = new ConcurrentHashMap<>();
+    private final ObjectMapper mapper = new ObjectMapper();
 
     public List<Route> findAll() {
         return new ArrayList<>(routes.values());
@@ -45,6 +48,7 @@ public class RouteService {
     public Route save(Route route) {
         route.setUpdatedAt(LocalDateTime.now());
         routes.put(route.getId(), route);
+        pushSnapshot(route);
         return route;
     }
 
@@ -55,20 +59,164 @@ public class RouteService {
     public RouteMetrics buildMetrics(Route route) {
         RouteMetrics metrics = new RouteMetrics();
         Map<SurfaceType, Double> bySurface = metrics.getBySurface();
+        // Ensure all coverage categories are present even if zero
+        for (SurfaceType type : SurfaceType.values()) {
+            bySurface.putIfAbsent(type, 0d);
+        }
         double total = 0;
         double prelim = 0;
+        double finalMeters = 0;
+        boolean finalStatus = route.getStatus() == RouteStatus.FINAL;
         for (RouteSegment segment : route.getSegments()) {
             double segmentMeters = distance(segment.getPoints());
             total += segmentMeters;
             if (segment.isPreliminary()) {
                 prelim += segmentMeters;
             }
-            bySurface.merge(segment.getSurfaceType(), segmentMeters / 1000d, Double::sum);
+            if (!segment.isPreliminary()) {
+                finalMeters += segmentMeters;
+            }
+        }
+        if (finalStatus) {
+            Map<SurfaceType, Double> detected = detectSurfaceTotals(route.getSegments());
+            boolean hasKnown = detected.entrySet().stream()
+                    .anyMatch(e -> e.getKey() != SurfaceType.UNKNOWN && e.getValue() > 0);
+            if (!hasKnown) {
+                double kmTotal = round(total / 1000d);
+                detected.clear();
+                for (SurfaceType type : SurfaceType.values()) {
+                    detected.put(type, 0d);
+                }
+                detected.put(SurfaceType.ASPHALT, kmTotal);
+                metrics.setCoverageFallback(true);
+            }
+            detected.forEach((type, km) -> bySurface.merge(type, km, Double::sum));
+            bySurface.replaceAll((t, v) -> round(v));
         }
         metrics.setTotalKm(round(total / 1000d));
         metrics.setPreliminaryKm(round(prelim / 1000d));
-        metrics.setEstimatedMinutes(round(minutesBySurface(bySurface)));
+        metrics.setFinalKm(round(finalMeters / 1000d));
+        metrics.setEstimatedMinutes(round(estimateMinutes(total / 1000d, bySurface, finalStatus)));
         return metrics;
+    }
+
+    private Map<SurfaceType, Double> detectSurfaceTotals(List<RouteSegment> segments) {
+        Map<SurfaceType, Double> totals = new ConcurrentHashMap<>();
+        for (SurfaceType type : SurfaceType.values()) {
+            totals.put(type, 0d);
+        }
+        for (RouteSegment segment : segments) {
+            SurfaceType type = classifySegmentSurface(segment);
+            double km = distance(segment.getPoints()) / 1000d;
+            totals.merge(type, km, Double::sum);
+        }
+        return totals;
+    }
+
+    private SurfaceType classifySegmentSurface(RouteSegment segment) {
+        if (segment.getPoints().size() < 2) {
+            return SurfaceType.UNKNOWN;
+        }
+        try {
+            List<GeoPoint> geometry = segment.getPoints();
+            double minLat = geometry.stream().mapToDouble(GeoPoint::getLat).min().orElse(0);
+            double maxLat = geometry.stream().mapToDouble(GeoPoint::getLat).max().orElse(0);
+            double minLng = geometry.stream().mapToDouble(GeoPoint::getLng).min().orElse(0);
+            double maxLng = geometry.stream().mapToDouble(GeoPoint::getLng).max().orElse(0);
+            double padding = 0.0015; // ~150m
+            String query = String.format("[out:json][timeout:25];(way[\"railway\"](%f,%f,%f,%f);way[\"highway\"](%f,%f,%f,%f););out tags geom;",
+                    minLat - padding, minLng - padding, maxLat + padding, maxLng + padding,
+                    minLat - padding, minLng - padding, maxLat + padding, maxLng + padding);
+            JsonNode response = fetchOverpass(query);
+            if (response == null || !response.has("elements")) {
+                return SurfaceType.UNKNOWN;
+            }
+            double bestDistance = Double.MAX_VALUE;
+            SurfaceType bestType = SurfaceType.UNKNOWN;
+            for (JsonNode element : response.get("elements")) {
+                JsonNode tagsNode = element.get("tags");
+                SurfaceType type = SurfaceType.UNKNOWN;
+                if (tagsNode != null) {
+                    type = classifyTags(tagsNode);
+                }
+                if (type == SurfaceType.UNKNOWN) {
+                    continue;
+                }
+                List<GeoPoint> wayGeometry = parseGeometry(element.get("geometry"));
+                double distance = minDistance(geometry, wayGeometry);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestType = type;
+                }
+            }
+            if (bestDistance < 60) { // meters
+                return bestType;
+            }
+        } catch (Exception ignored) {
+        }
+        return SurfaceType.UNKNOWN;
+    }
+
+    private SurfaceType classifyTags(JsonNode tags) {
+        if (tags.has("railway")) {
+            return SurfaceType.RAILWAY;
+        }
+        String surface = tags.has("surface") ? tags.get("surface").asText("").toLowerCase() : "";
+        String highway = tags.has("highway") ? tags.get("highway").asText("").toLowerCase() : "";
+        if (surface.contains("asphalt") || surface.contains("paved")) {
+            return SurfaceType.ASPHALT;
+        }
+        if (highway.equals("track") || surface.contains("ground") || surface.contains("dirt") || surface.contains("gravel")) {
+            return SurfaceType.FIELD_PATH;
+        }
+        if (highway.equals("path") || highway.equals("footway") || highway.equals("bridleway") || highway.equals("cycleway")) {
+            return SurfaceType.FOREST_TRAIL;
+        }
+        return SurfaceType.UNKNOWN;
+    }
+
+    private List<GeoPoint> parseGeometry(JsonNode geometryNode) {
+        List<GeoPoint> points = new ArrayList<>();
+        if (geometryNode == null || !geometryNode.isArray()) {
+            return points;
+        }
+        for (JsonNode node : geometryNode) {
+            if (node.has("lat") && node.has("lon")) {
+                points.add(new GeoPoint(node.get("lat").asDouble(), node.get("lon").asDouble(), false));
+            }
+        }
+        return points;
+    }
+
+    private double minDistance(List<GeoPoint> segmentPoints, List<GeoPoint> wayPoints) {
+        double best = Double.MAX_VALUE;
+        for (GeoPoint a : segmentPoints) {
+            for (GeoPoint b : wayPoints) {
+                best = Math.min(best, GeoUtils.distanceMeters(a, b));
+            }
+        }
+        return best;
+    }
+
+    private JsonNode fetchOverpass(String query) throws IOException, InterruptedException {
+        var client = java.net.http.HttpClient.newHttpClient();
+        var request = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create("https://overpass-api.de/api/interpreter"))
+                .header("Content-Type", "text/plain")
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(query))
+                .build();
+        var response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() >= 200 && response.statusCode() < 300) {
+            return mapper.readTree(response.body());
+        }
+        return null;
+    }
+
+    private double estimateMinutes(double totalKm, Map<SurfaceType, Double> bySurfaceKm, boolean useSurface) {
+        if (!useSurface) {
+            return (totalKm / 4.5) * 60d;
+        }
+        return minutesBySurface(bySurfaceKm);
     }
 
     private double minutesBySurface(Map<SurfaceType, Double> bySurfaceKm) {
@@ -102,6 +250,7 @@ public class RouteService {
         }
         for (RouteSegment segment : route.getSegments()) {
             if (segment.getId().equals(segmentId)) {
+                pushSnapshot(route);
                 segment.getPoints().add(point);
                 route.setUpdatedAt(LocalDateTime.now());
                 return Optional.of(point);
@@ -131,6 +280,35 @@ public class RouteService {
         Route route = routes.get(routeId);
         if (route == null) return Optional.empty();
         return route.getSegments().stream().filter(s -> s.getId().equals(segmentId)).findFirst();
+    }
+
+    public Optional<Route> undo(UUID routeId) {
+        Route route = routes.get(routeId);
+        RouteHistory history = histories.get(routeId);
+        if (route == null || history == null || history.getUndo().size() < 2) {
+            return Optional.empty();
+        }
+        Route current = history.getUndo().pop();
+        history.getRedo().push(cloneRoute(current));
+        Route previous = cloneRoute(history.getUndo().peek());
+        routes.put(routeId, previous);
+        return Optional.of(previous);
+    }
+
+    public Optional<Route> redo(UUID routeId) {
+        RouteHistory history = histories.get(routeId);
+        if (history == null || history.getRedo().isEmpty()) {
+            return Optional.empty();
+        }
+        Route next = cloneRoute(history.getRedo().pop());
+        histories.get(routeId).getUndo().push(cloneRoute(next));
+        routes.put(routeId, next);
+        return Optional.of(next);
+    }
+
+    public RouteMetrics evaluate(List<RouteSegment> segments, RouteStatus status, String name) {
+        Route temp = new Route(name, status, segments);
+        return buildMetrics(temp);
     }
 
     public String exportGpx(Route route) {
@@ -241,5 +419,39 @@ public class RouteService {
 
     private double round(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    private void pushSnapshot(Route route) {
+        RouteHistory history = histories.computeIfAbsent(route.getId(), key -> new RouteHistory());
+        history.getUndo().push(cloneRoute(route));
+        history.getRedo().clear();
+    }
+
+    private Route cloneRoute(Route source) {
+        Route copy = new Route();
+        copy.setId(source.getId());
+        copy.setName(source.getName());
+        copy.setStatus(source.getStatus());
+        copy.setUpdatedAt(source.getUpdatedAt());
+        copy.setSegments(cloneSegments(source.getSegments()));
+        return copy;
+    }
+
+    private List<RouteSegment> cloneSegments(List<RouteSegment> segments) {
+        List<RouteSegment> copy = new ArrayList<>();
+        for (RouteSegment segment : segments) {
+            RouteSegment newSeg = new RouteSegment();
+            newSeg.setId(segment.getId());
+            newSeg.setName(segment.getName());
+            newSeg.setSurfaceType(segment.getSurfaceType());
+            newSeg.setPreliminary(segment.isPreliminary());
+            List<GeoPoint> points = new ArrayList<>();
+            for (GeoPoint p : segment.getPoints()) {
+                points.add(new GeoPoint(p.getLat(), p.getLng(), p.isNode()));
+            }
+            newSeg.setPoints(points);
+            copy.add(newSeg);
+        }
+        return copy;
     }
 }
