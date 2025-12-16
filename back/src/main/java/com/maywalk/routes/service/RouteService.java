@@ -57,6 +57,10 @@ public class RouteService {
     public RouteMetrics buildMetrics(Route route) {
         RouteMetrics metrics = new RouteMetrics();
         Map<SurfaceType, Double> bySurface = metrics.getBySurface();
+        // Ensure all coverage categories are present even if zero
+        for (SurfaceType type : SurfaceType.values()) {
+            bySurface.putIfAbsent(type, 0d);
+        }
         double total = 0;
         double prelim = 0;
         double finalMeters = 0;
@@ -72,6 +76,11 @@ public class RouteService {
             }
             if (!segment.isPreliminary()) {
                 finalMeters += segmentMeters;
+            }
+        }
+        if (finalStatus) {
+            for (SurfaceType type : SurfaceType.values()) {
+                bySurface.put(type, round(bySurface.getOrDefault(type, 0d)));
             }
         }
         metrics.setTotalKm(round(total / 1000d));
