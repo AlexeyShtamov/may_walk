@@ -57,6 +57,65 @@ body {
 .topbar__right {
   display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+.route-loader {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.input--compact {
+  padding: 6px 8px;
+  height: 36px;
+  font-size: 14px;
+  width: 190px;
+}
+
+.mode-switcher {
+  display: inline-flex;
+  background: white;
+  border: 1px solid #bfbfbf;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+}
+
+.history-switcher {
+  display: inline-flex;
+  background: white;
+  border: 1px solid #bfbfbf;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+  margin-right: 8px;
+}
+
+.mode-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 10px;
+  font-size: 20px;
+  cursor: pointer;
+  min-width: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #444;
+}
+
+.mode-btn + .mode-btn {
+  border-left: 1px solid #d3d3d3;
+}
+
+.mode-btn.active {
+  background: #f0f0f0;
+}
+
+.mode-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .primary-btn {
@@ -71,6 +130,10 @@ body {
   align-items: center;
   gap: 8px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+}
+
+.route-loader .primary-btn {
+  height: 36px;
 }
 
 .primary-btn:disabled {
@@ -183,20 +246,58 @@ body {
   color: #e75555;
 }
 
-.stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 12px;
+.stats-card {
+  background: linear-gradient(180deg, #fdfdfd 0%, #f4f4f4 100%);
+  border: 1px solid #d7d7d7;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
 }
 
-.stat {
+.stats-card--final {
+  border-color: #e57373;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1px rgba(229,85,85,0.1);
+}
+
+.stat-heading {
+  font-weight: 700;
+  margin: 4px 0 6px;
+  color: #333;
+}
+
+.stat-line {
   font-size: 13px;
   color: #444;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-.stat span {
+.stat-label {
+  color: #555;
+}
+
+.stat-value {
   font-weight: 700;
   color: #222;
+}
+
+.coverage-block {
+  border: 1px dashed #d7d7d7;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fafafa;
+}
+
+.coverage-block--highlight {
+  background: #fff7f7;
+  border-color: #e57373;
+  box-shadow: 0 0 0 1px rgba(229,85,85,0.12);
+}
+
+.stat-divider {
+  border-bottom: 1px dashed #cfcfcf;
+  margin: 8px 0;
 }
 
 .actions {
@@ -241,4 +342,14 @@ body {
   border-radius: 6px;
   background: #fff;
   font-size: 14px;
+}
+
+.route-name-display {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #bcbcbc;
+  border-radius: 6px;
+  background: #f8f8f8;
+  font-weight: 700;
+  color: #444;
 }
