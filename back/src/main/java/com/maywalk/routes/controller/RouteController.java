@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.maywalk.routes.dto.AddPointRequest;
 import com.maywalk.routes.dto.CreateRouteRequest;
+import com.maywalk.routes.dto.EvaluateRouteRequest;
 import com.maywalk.routes.dto.NearbyPointResponse;
 import com.maywalk.routes.dto.NearbySearchRequest;
 import com.maywalk.routes.dto.RouteResponse;
@@ -79,6 +80,11 @@ public class RouteController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @PostMapping("/metrics")
+    public ResponseEntity<?> metrics(@RequestBody @Validated EvaluateRouteRequest request) {
+        return ResponseEntity.ok(routeService.evaluate(request.getSegments(), request.getStatus(), request.getName()));
+    }
+
     @PostMapping("/nearest")
     public ResponseEntity<NearbyPointResponse> nearest(@RequestBody @Validated NearbySearchRequest request) {
         GeoPoint target = new GeoPoint(request.getLat(), request.getLng(), false);
@@ -103,6 +109,20 @@ public class RouteController {
                     return ResponseEntity.ok(new RouteResponse(route, routeService.buildMetrics(route)));
                 })
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/{id}/undo")
+    public ResponseEntity<RouteResponse> undo(@PathVariable("id") UUID id) {
+        return routeService.undo(id)
+                .map(route -> ResponseEntity.ok(new RouteResponse(route, routeService.buildMetrics(route))))
+                .orElse(ResponseEntity.badRequest().build());
+    }
+
+    @PostMapping("/{id}/redo")
+    public ResponseEntity<RouteResponse> redo(@PathVariable("id") UUID id) {
+        return routeService.redo(id)
+                .map(route -> ResponseEntity.ok(new RouteResponse(route, routeService.buildMetrics(route))))
+                .orElse(ResponseEntity.badRequest().build());
     }
 
     @GetMapping("/{id}/export/gpx")

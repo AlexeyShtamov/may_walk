@@ -41,6 +41,10 @@ const app = Vue.createApp({
       isDrawing: false,
       skipNextClick: false,
       freeDrawMinDistance: 8,
+
+      undoStack: [],
+      redoStack: [],
+      restoring: false,
     };
   },
   mounted() {
@@ -54,6 +58,12 @@ const app = Vue.createApp({
     this.map.on('mouseup', this.handleMouseUp);
     this.updateMapInteraction();
     this.loadRoutes();
+    this.pushHistory();
+  },
+  watch: {
+    status(newStatus) {
+      this.handleStatusChange(newStatus);
+    },
   },
   methods: {
     createTileLayer(key) {
@@ -118,6 +128,7 @@ const app = Vue.createApp({
     setMode(newMode) {
       const allowed = ['point', 'free', 'pan'];
       if (!allowed.includes(newMode)) return;
+      if (!this.allowAddPoints && newMode !== 'pan') return;
       this.mode = newMode;
       this.isDrawing = false;
       this.skipNextClick = false;
@@ -132,6 +143,38 @@ const app = Vue.createApp({
       } else {
         this.map.dragging.disable();
         this.map.keyboard.disable();
+      }
+    },
+
+    handleStatusChange(status) {
+      if (this.restoring) return;
+      if (status === 'FINAL') {
+        this.finalizeCurrentSegment();
+        this.markSegmentsFinal();
+        this.allowAddPoints = false;
+        this.setMode('pan');
+        this.refreshMetricsFromBackend();
+      } else {
+        this.allowAddPoints = true;
+        if (this.mode === 'pan') {
+          this.setMode('point');
+        }
+        this.updateMetricsDraft();
+      }
+      this.pushHistory();
+    },
+
+    markSegmentsFinal() {
+      this.segments = this.segments.map(seg => ({ ...seg, preliminary: false }));
+    },
+
+    finalizeCurrentSegment() {
+      if (this.currentSegment.points.length) {
+        this.segments.push({ ...this.currentSegment, id: this.currentSegment.id || crypto.randomUUID() });
+        this.currentSegment = { name: 'Новый участок', surfaceType: 'FOREST_TRAIL', preliminary: true, points: [] };
+        this.activePolyline.setLatLngs([]);
+        this.clearActiveMarkers();
+        this.pushHistory();
       }
     },
 
@@ -161,6 +204,7 @@ const app = Vue.createApp({
       this.activePolyline.setLatLngs(this.currentSegment.points.map(p => [p.lat, p.lng]));
       this.redrawActiveMarkers();
       this.updateMetricsDraft();
+      this.pushHistory();
     },
 
     async handleMouseDown(e) {
@@ -204,12 +248,14 @@ const app = Vue.createApp({
       this.resetSegment();
       this.drawSegments();
       this.updateMetricsDraft();
+      this.pushHistory();
     },
 
     removeSegment(index) {
       this.segments.splice(index, 1);
       this.drawSegments();
       this.updateMetricsDraft();
+      this.pushHistory();
     },
 
     clearRenderedSegments() {
@@ -226,21 +272,30 @@ const app = Vue.createApp({
       this.metrics = null;
       this.notice = 'Маршрут очищен';
       this.clearRenderedSegments();
+      this.status = 'PRELIMINARY';
+      this.allowAddPoints = true;
+      this.setMode('point');
+      this.pushHistory();
     },
 
     async saveRoute() {
+      if (this.status === 'PRELIMINARY') {
+        window.alert('Нельзя сохранить предварительный маршрут. Выберите статус "Окончательный".');
+        return;
+      }
       this.loading = true;
       try {
         const payload = {
           name: this.routeName,
           status: this.status,
-          segments: [...this.segments, this.currentSegment],
+          segments: this.collectSegments(),
         };
         const response = await api.post('/routes', payload);
         this.metrics = response.data.metrics;
         this.notice = 'Маршрут сохранён и проанализирован';
         this.selectedRouteId = response.data.route.id;
         await this.loadRoutes();
+        this.clearRoute();
       } catch (e) {
         this.notice = 'Не удалось сохранить маршрут';
       } finally {
@@ -264,6 +319,11 @@ const app = Vue.createApp({
       this.activePolyline.setLatLngs([]);
       this.clearActiveMarkers();
       this.drawSegments();
+      this.undoStack = [];
+      this.redoStack = [];
+      this.allowAddPoints = this.status !== 'FINAL';
+      this.setMode(this.allowAddPoints ? 'point' : 'pan');
+      this.pushHistory();
     },
 
     drawSegments() {
@@ -304,46 +364,103 @@ const app = Vue.createApp({
     },
 
     updateMetricsDraft() {
-      const draftSegments = [...this.segments];
-      if (this.currentSegment.points.length) {
-        draftSegments.push(this.currentSegment);
-      }
+      const draftSegments = this.collectSegments();
       if (!draftSegments.length) {
         this.metrics = null;
         return;
       }
 
       let total = 0;
-      let preliminary = 0;
-      let final = 0;
-      const bySurfaceMeters = {};
-
       draftSegments.forEach(seg => {
-        let segMeters = 0;
         for (let i = 1; i < seg.points.length; i++) {
           const a = seg.points[i - 1];
           const b = seg.points[i];
-          const d = this.haversine(a.lat, a.lng, b.lat, b.lng);
-          segMeters += d;
-        }
-        total += segMeters;
-        bySurfaceMeters[seg.surfaceType] = (bySurfaceMeters[seg.surfaceType] || 0) + segMeters;
-        if (seg.preliminary) {
-          preliminary += segMeters;
-        } else {
-          final += segMeters;
+          total += this.haversine(a.lat, a.lng, b.lat, b.lng);
         }
       });
 
       const formatKm = m => +(m / 1000).toFixed(1);
-
       this.metrics = {
         totalKm: formatKm(total),
-        preliminaryKm: formatKm(preliminary),
-        finalKm: formatKm(final),
         estimatedMinutes: Math.round((total / 1000) / 4.5 * 60) || 0,
-        bySurface: Object.fromEntries(Object.entries(bySurfaceMeters).map(([k, v]) => [k, formatKm(v)])),
+        preliminaryKm: formatKm(total),
+        finalKm: 0,
+        bySurface: {},
       };
+    },
+
+    async refreshMetricsFromBackend() {
+      const payload = {
+        name: this.routeName,
+        status: this.status,
+        segments: this.collectSegments(),
+      };
+      const response = await api.post('/routes/metrics', payload);
+      this.metrics = response.data;
+    },
+
+    collectSegments() {
+      const draft = [...this.cloneSegments(this.segments)];
+      if (this.currentSegment.points.length) {
+        draft.push(this.cloneSegment(this.currentSegment));
+      }
+      return draft;
+    },
+
+    cloneSegments(list) {
+      return list.map(seg => this.cloneSegment(seg));
+    },
+
+    cloneSegment(seg) {
+      return {
+        ...seg,
+        points: seg.points.map(p => ({ ...p })),
+      };
+    },
+
+    snapshotRoute() {
+      return {
+        segments: this.cloneSegments(this.segments),
+        currentSegment: this.cloneSegment(this.currentSegment),
+        status: this.status,
+      };
+    },
+
+    applySnapshot(state) {
+      this.restoring = true;
+      this.segments = this.cloneSegments(state.segments);
+      this.currentSegment = this.cloneSegment(state.currentSegment);
+      this.status = state.status;
+      this.restoring = false;
+      this.activePolyline.setLatLngs(this.currentSegment.points.map(p => [p.lat, p.lng]));
+      this.redrawActiveMarkers();
+      this.drawSegments();
+      if (this.status === 'FINAL') {
+        this.refreshMetricsFromBackend();
+      } else {
+        this.updateMetricsDraft();
+      }
+    },
+
+    pushHistory() {
+      if (this.restoring) return;
+      this.undoStack.push(this.snapshotRoute());
+      this.redoStack = [];
+    },
+
+    undoAction() {
+      if (this.undoStack.length < 2) return;
+      const current = this.undoStack.pop();
+      this.redoStack.push(current);
+      const previous = this.undoStack[this.undoStack.length - 1];
+      this.applySnapshot(previous);
+    },
+
+    redoAction() {
+      if (!this.redoStack.length) return;
+      const next = this.redoStack.pop();
+      this.undoStack.push(next);
+      this.applySnapshot(next);
     },
 
     haversine(lat1, lon1, lat2, lon2) {
@@ -356,6 +473,10 @@ const app = Vue.createApp({
     },
 
     async exportRoute(type) {
+      if (this.status === 'PRELIMINARY') {
+        window.alert('Нельзя экспортировать предварительный маршрут. Установите статус "Окончательный" и сохраните маршрут.');
+        return;
+      }
       if (!this.selectedRouteId) {
         this.notice = 'Сначала сохраните маршрут';
         return;

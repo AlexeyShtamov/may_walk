@@ -8,6 +8,7 @@ import com.maywalk.routes.model.SurfaceType;
 public class RouteMetrics {
     private double totalKm;
     private double preliminaryKm;
+    private double finalKm;
     private Map<SurfaceType, Double> bySurface = new EnumMap<>(SurfaceType.class);
     private double estimatedMinutes;
 
@@ -44,5 +45,13 @@ public class RouteMetrics {
 
     public void setEstimatedMinutes(double estimatedMinutes) {
         this.estimatedMinutes = estimatedMinutes;
+    }
+
+    public double getFinalKm() {
+        return finalKm;
+    }
+
+    public void setFinalKm(double finalKm) {
+        this.finalKm = finalKm;
     }
 }
