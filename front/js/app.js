@@ -30,6 +30,9 @@ const app = Vue.createApp({
       showOldRoutes: false,
       focusOnRoute: false,
       coverageMode: 'none',
+      showExportModal: false,
+      selectedExportFormat: 'gpx',
+      undonePoints: [],
       surfaces: {
         asphalt: true,
         trail: true,
@@ -107,6 +110,7 @@ const app = Vue.createApp({
     },
     async handleMapClick(e) {
       if (!this.allowAddPoints) return;
+      this.undonePoints = [];
       let chosenPoint = e.latlng;
       if (this.snapToArchive) {
         const candidate = await this.searchNearest(e.latlng);
@@ -150,6 +154,22 @@ const app = Vue.createApp({
       this.metrics = null;
       this.notice = 'Маршрут очищен';
       this.clearRenderedSegments();
+    },
+    undoPoint() {
+      const removed = this.currentSegment.points.pop();
+      if (removed) {
+        this.undonePoints.push(removed);
+        this.activePolyline.setLatLngs(this.currentSegment.points.map(p => [p.lat, p.lng]));
+        this.updateMetricsDraft();
+      }
+    },
+    redoPoint() {
+      const restored = this.undonePoints.pop();
+      if (restored) {
+        this.currentSegment.points.push(restored);
+        this.activePolyline.setLatLngs(this.currentSegment.points.map(p => [p.lat, p.lng]));
+        this.updateMetricsDraft();
+      }
     },
     async saveRoute() {
       this.loading = true;
@@ -259,6 +279,22 @@ const app = Vue.createApp({
       link.href = url;
       link.download = `route-${this.selectedRouteId}.${type}`;
       link.click();
+    },
+    openExport() {
+      this.showExportModal = true;
+    },
+    confirmExport() {
+      this.showExportModal = false;
+      this.exportRoute(this.selectedExportFormat);
+    },
+    zoomIn() {
+      this.map?.zoomIn();
+    },
+    zoomOut() {
+      this.map?.zoomOut();
+    },
+    resetView() {
+      this.map?.setView([56.8389, 60.6057], 11);
     },
   },
 });

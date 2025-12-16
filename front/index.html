@@ -23,7 +23,7 @@
         </div>
       </div>
       <div class="topbar__right">
-        <button class="primary-btn" @click="openRoute">
+        <button class="ghost-btn" @click="openRoute">
           <i class="fa-solid fa-cloud-arrow-up"></i>
           Загрузить маршрут
         </button>
@@ -33,90 +33,143 @@
     <div class="workspace">
       <!-- ЛЕВАЯ ПАНЕЛЬ -->
       <aside class="sidebar">
-        <section class="panel">
-          <div class="panel__header">Режим</div>
-          <div class="panel__row">
-            <label class="radio"><input type="radio" value="free" v-model="mode" /> Свободный</label>
-            <label class="radio"><input type="radio" value="point" v-model="mode" /> Точечный</label>
-          </div>
-        </section>
+        <div class="sidebar__inner">
+          <section class="card">
+            <div class="card__title">Режим</div>
+            <div class="card__controls card__controls--inline">
+              <label class="choice"><input type="radio" value="free" v-model="mode" /> Свободный</label>
+              <label class="choice"><input type="radio" value="point" v-model="mode" /> Точечный</label>
+            </div>
+          </section>
 
-        <section class="panel">
-          <div class="panel__header">Привязка</div>
-          <div class="panel__content">
-            <label class="checkbox"><input type="checkbox" v-model="snapToRoads" disabled /> По дорогам</label>
-            <label class="checkbox"><input type="checkbox" v-model="snapToArchive" /> К архиву</label>
-          </div>
-          <div class="panel__content">
-            <div class="panel__label">Вдоль маршрут (расстояние до него) — {{ archiveThreshold }} м</div>
-            <input type="range" min="10" max="120" v-model.number="archiveThreshold" />
-          </div>
-        </section>
+          <section class="card">
+            <div class="card__title">Привязка</div>
+            <div class="card__controls card__controls--stacked">
+              <label class="toggle"><input type="checkbox" v-model="snapToRoads" disabled /><span>По дорогам</span></label>
+              <label class="toggle"><input type="checkbox" v-model="snapToArchive" /><span>К архиву</span></label>
+              <div class="slider-row">
+                <div class="slider-row__label">Вдоль маршрут (расстояние до него) — {{ archiveThreshold }} м</div>
+                <input type="range" min="10" max="120" v-model.number="archiveThreshold" />
+              </div>
+            </div>
+          </section>
 
-        <section class="panel">
-          <div class="panel__header">Отображение</div>
-          <div class="panel__content">
-            <label class="checkbox"><input type="checkbox" v-model="showOldRoutes" /> Показывать старые маршруты</label>
-            <label class="checkbox"><input type="checkbox" v-model="focusOnRoute" /> От текущего маршруте</label>
-          </div>
-          <div class="tile-switcher">
-            <button class="tile-btn" :class="{ active: tileLayer === 'osm' }" @click="setTile('osm')" title="OSM"><i class="fa-solid fa-earth-europe"></i></button>
-            <button class="tile-btn" :class="{ active: tileLayer === 'arcgis' }" @click="setTile('arcgis')" title="ArcGIS"><i class="fa-regular fa-image"></i></button>
-            <button class="tile-btn" :class="{ active: tileLayer === 'wikimapia' }" @click="setTile('wikimapia')" title="Wikimapia"><i class="fa-regular fa-map"></i></button>
-            <button class="tile-btn" :class="{ active: tileLayer === 'google' }" @click="setTile('google')" title="Google"><i class="fa-brands fa-google"></i></button>
-            <button class="tile-btn" :class="{ active: tileLayer === 'yandex' }" @click="setTile('yandex')" title="Yandex"><i class="fa-solid fa-location-dot"></i></button>
-            <button class="tile-btn" :class="{ active: tileLayer === 'satellite' }" @click="setTile('satellite')" title="Satellite"><i class="fa-solid fa-satellite"></i></button>
-          </div>
-        </section>
+          <section class="card">
+            <div class="card__title">Отображение</div>
+            <div class="card__controls card__controls--stacked">
+              <label class="toggle"><input type="checkbox" v-model="showOldRoutes" /><span>Показывать старые маршруты</span></label>
+              <label class="toggle"><input type="checkbox" v-model="focusOnRoute" /><span>От текущего маршрута</span></label>
+              <div class="tile-select">
+                <label>Подложка</label>
+                <select v-model="tileLayer" @change="setTile(tileLayer)">
+                  <option value="osm">OSM</option>
+                  <option value="arcgis">ArcGIS</option>
+                  <option value="wikimapia">Wikimapia</option>
+                  <option value="google">Google</option>
+                  <option value="yandex">Yandex</option>
+                  <option value="satellite">Спутник</option>
+                </select>
+              </div>
+            </div>
+          </section>
 
-        <section class="panel">
-          <div class="panel__header">Путь</div>
-          <div class="panel__row buttons">
-            <button class="secondary-btn" @click="togglePointMode"><i class="fa-solid fa-plus"></i> Добавить точку</button>
-            <button class="secondary-btn" disabled><i class="fa-solid fa-up-down-left-right"></i> Переставить точки</button>
-            <button class="secondary-btn" @click="clearRoute"><i class="fa-solid fa-trash"></i> Очистить маршрут</button>
-          </div>
-          <div class="panel__content panel__content--stacked">
-            <label class="radio"><input type="radio" value="none" v-model="coverageMode" /> Без учета покрытия</label>
-            <label class="radio"><input type="radio" value="use" v-model="coverageMode" /> Использовать покрытия</label>
-            <label class="radio"><input type="radio" value="view" v-model="coverageMode" /> Просмотр очков</label>
-          </div>
-        </section>
+          <section class="card">
+            <div class="card__title">Путь</div>
+            <div class="card__controls card__controls--stacked">
+              <button class="ghost-btn" :class="{ active: allowAddPoints }" @click="togglePointMode">Добавить точку</button>
+              <button class="ghost-btn" disabled>Переставить точки</button>
+              <button class="ghost-btn" @click="clearRoute">Очистить маршрут</button>
+              <label class="choice"><input type="radio" value="none" v-model="coverageMode" /> Без учета покрытия</label>
+              <label class="choice"><input type="radio" value="use" v-model="coverageMode" /> Использовать покрытия</label>
+              <label class="choice"><input type="radio" value="view" v-model="coverageMode" /> Просмотр очков</label>
+            </div>
+          </section>
 
-        <section class="panel">
-          <div class="panel__header">Детали покрытия</div>
-          <div class="panel__content panel__content--stacked">
-            <label class="checkbox"><input type="checkbox" v-model="surfaces.asphalt" /> Асфальт: {{ metrics?.bySurface?.ASPHALT || 0 }} км</label>
-            <label class="checkbox"><input type="checkbox" v-model="surfaces.trail" /> Лесная тропа: {{ metrics?.bySurface?.FOREST_TRAIL || 0 }} км</label>
-            <label class="checkbox"><input type="checkbox" v-model="surfaces.field" /> Полевой путь: {{ metrics?.bySurface?.FIELD_PATH || 0 }} км</label>
-            <label class="checkbox"><input type="checkbox" v-model="surfaces.rail" /> Ж/Д: {{ metrics?.bySurface?.RAILWAY || 0 }} км</label>
-          </div>
-        </section>
+          <section class="card">
+            <div class="card__title">Статус</div>
+            <div class="card__controls card__controls--stacked">
+              <select v-model="status" class="status-select">
+                <option value="PRELIMINARY">Предварительный 🟠</option>
+                <option value="FINAL">Окончательный 🟢</option>
+              </select>
+            </div>
+          </section>
 
-        <section class="panel stats">
-          <div class="stat">Протяженность: <span>{{ metrics?.totalKm || 0 }} км</span></div>
-          <div class="stat">Время: <span>{{ metrics?.estimatedMinutes || 0 }} мин</span></div>
-          <div class="stat">Асфальт: <span>{{ metrics?.bySurface?.ASPHALT || 0 }} км</span></div>
-          <div class="stat">Лесная тропа: <span>{{ metrics?.bySurface?.FOREST_TRAIL || 0 }} км</span></div>
-          <div class="stat">Полевой путь: <span>{{ metrics?.bySurface?.FIELD_PATH || 0 }} км</span></div>
-          <div class="stat">Ж/Д: <span>{{ metrics?.bySurface?.RAILWAY || 0 }} км</span></div>
-          <div class="stat">Черновик: <span>{{ metrics?.preliminaryKm || 0 }} км</span></div>
-          <div class="stat">Окончательный: <span>{{ metrics?.finalKm || 0 }} км</span></div>
-        </section>
+          <section class="card card--muted">
+            <div class="card__title">📏 Метрики</div>
+            <div class="metrics">
+              <div class="metric-line"><span>Протяженность:</span><strong>{{ metrics?.totalKm || 0 }} км</strong></div>
+              <div class="metric-line"><span>Время:</span><strong>{{ metrics?.estimatedMinutes || 0 }} мин</strong></div>
+              <div class="metric-line"><span>Асфальт:</span><strong>{{ metrics?.bySurface?.ASPHALT || 0 }} км</strong></div>
+              <div class="metric-line"><span>Лесная тропа:</span><strong>{{ metrics?.bySurface?.FOREST_TRAIL || 0 }} км</strong></div>
+              <div class="metric-line"><span>Полевой путь:</span><strong>{{ metrics?.bySurface?.FIELD_PATH || 0 }} км</strong></div>
+              <div class="metric-line"><span>Ж/Д:</span><strong>{{ metrics?.bySurface?.RAILWAY || 0 }} км</strong></div>
+              <div class="metric-line"><span>Черновик:</span><strong>{{ metrics?.preliminaryKm || 0 }} км</strong></div>
+              <div class="metric-line"><span>Окончательный:</span><strong>{{ metrics?.finalKm || 0 }} км</strong></div>
+            </div>
+          </section>
 
-        <div class="panel actions">
-          <button class="primary-btn" @click="saveRoute" :disabled="loading">Сохранить</button>
-          <div class="export-group">
-            <button class="secondary-btn" @click="exportRoute('gpx')">Экспортировать GPX</button>
-            <button class="secondary-btn" @click="exportRoute('kml')">Экспортировать KML</button>
-            <button class="secondary-btn" @click="exportRoute('kmz')">Экспортировать KMZ</button>
+          <section class="card">
+            <div class="card__title">Детали покрытия</div>
+            <div class="card__controls card__controls--stacked">
+              <label class="toggle"><input type="checkbox" v-model="surfaces.asphalt" /><span>Асфальт: {{ metrics?.bySurface?.ASPHALT || 0 }} км</span></label>
+              <label class="toggle"><input type="checkbox" v-model="surfaces.trail" /><span>Лесная тропа: {{ metrics?.bySurface?.FOREST_TRAIL || 0 }} км</span></label>
+              <label class="toggle"><input type="checkbox" v-model="surfaces.field" /><span>Полевой путь: {{ metrics?.bySurface?.FIELD_PATH || 0 }} км</span></label>
+              <label class="toggle"><input type="checkbox" v-model="surfaces.rail" /><span>Ж/Д: {{ metrics?.bySurface?.RAILWAY || 0 }} км</span></label>
+            </div>
+          </section>
+
+          <div class="card actions">
+            <button class="primary-btn" @click="saveRoute" :disabled="loading">Сохранить</button>
+            <button class="ghost-btn" @click="openExport">Экспортировать</button>
           </div>
+
+          <div class="notice" v-if="notice">{{ notice }}</div>
         </div>
-        <div class="notice" v-if="notice">{{ notice }}</div>
       </aside>
 
       <!-- КАРТА -->
-      <div id="map"></div>
+      <div class="map-wrapper">
+        <div class="map-toolbar">
+          <div class="toolbar-group">
+            <select v-model="tileLayer" @change="setTile(tileLayer)">
+              <option value="osm">OSM</option>
+              <option value="arcgis">ArcGIS</option>
+              <option value="wikimapia">Wikimapia</option>
+              <option value="google">Google</option>
+              <option value="yandex">Yandex</option>
+              <option value="satellite">Спутник</option>
+            </select>
+          </div>
+          <div class="toolbar-group">
+            <button @click="undoPoint" :disabled="!currentSegment.points.length" title="Отменить точку">↶</button>
+            <button @click="redoPoint" :disabled="!undonePoints.length" title="Вернуть точку">↷</button>
+            <button :class="{ active: allowAddPoints }" @click="togglePointMode" title="Режим добавления">✋</button>
+            <button @click="clearRoute" title="Очистить маршрут">✖</button>
+          </div>
+          <div class="toolbar-group">
+            <button @click="zoomIn" title="Приблизить">+</button>
+            <button @click="zoomOut" title="Отдалить">−</button>
+            <button @click="resetView" title="Сброс вида">⟳</button>
+          </div>
+        </div>
+        <div id="map"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" v-if="showExportModal">
+    <div class="modal">
+      <div class="modal__header">Выберите формат экспорта</div>
+      <div class="modal__body">
+        <label class="choice"><input type="radio" value="gpx" v-model="selectedExportFormat" /> GPX</label>
+        <label class="choice"><input type="radio" value="kml" v-model="selectedExportFormat" /> KML</label>
+        <label class="choice"><input type="radio" value="kmz" v-model="selectedExportFormat" /> KMZ</label>
+      </div>
+      <div class="modal__actions">
+        <button class="primary-btn" @click="confirmExport">Экспортировать</button>
+        <button class="ghost-btn" @click="showExportModal = false">Отмена</button>
+      </div>
     </div>
   </div>
 
