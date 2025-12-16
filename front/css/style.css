@@ -69,6 +69,16 @@ body {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
 }
 
+.history-switcher {
+  display: inline-flex;
+  background: white;
+  border: 1px solid #bfbfbf;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+  margin-right: 8px;
+}
+
 .mode-btn {
   background: transparent;
   border: none;
@@ -88,6 +98,11 @@ body {
 
 .mode-btn.active {
   background: #f0f0f0;
+}
+
+.mode-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .primary-btn {
@@ -214,20 +229,40 @@ body {
   color: #e75555;
 }
 
-.stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 12px;
+.stats-card {
+  background: linear-gradient(180deg, #fdfdfd 0%, #f4f4f4 100%);
+  border: 1px solid #d7d7d7;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
 }
 
-.stat {
+.stat-heading {
+  font-weight: 700;
+  margin: 4px 0 6px;
+  color: #333;
+}
+
+.stat-line {
   font-size: 13px;
   color: #444;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-.stat span {
+.stat-label {
+  color: #555;
+}
+
+.stat-value {
   font-weight: 700;
   color: #222;
+}
+
+.stat-divider {
+  border-bottom: 1px dashed #cfcfcf;
+  margin: 8px 0;
 }
 
 .actions {

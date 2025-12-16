@@ -22,9 +22,13 @@
       </div>
     </div>
     <div class="topbar__right">
+      <div class="history-switcher">
+        <button class="mode-btn" :disabled="undoStack.length < 2" @click="undoAction" title="Отменить точку">↩️</button>
+        <button class="mode-btn" :disabled="!redoStack.length" @click="redoAction" title="Вернуть точку">↪️</button>
+      </div>
       <div class="mode-switcher">
-        <button class="mode-btn" :class="{ active: mode === 'point' }" @click="setMode('point')" title="Точечный режим">⚪️</button>
-        <button class="mode-btn" :class="{ active: mode === 'free' }" @click="setMode('free')" title="Свободный режим">✏️</button>
+        <button class="mode-btn" :disabled="status === 'FINAL'" :class="{ active: mode === 'point' }" @click="setMode('point')" title="Точечный режим">⚪️</button>
+        <button class="mode-btn" :disabled="status === 'FINAL'" :class="{ active: mode === 'free' }" @click="setMode('free')" title="Свободный режим">✏️</button>
         <button class="mode-btn" :class="{ active: mode === 'pan' }" @click="setMode('pan')" title="Перемещение карты">🤚</button>
       </div>
       <button class="primary-btn" @click="openRoute">
@@ -70,21 +74,24 @@
         </div>
       </section>
 
-      <section class="panel stats">
-        <div class="stat">Протяженность: <span>{{ metrics?.totalKm || 0 }} км</span></div>
-        <div class="stat">Время: <span>{{ metrics?.estimatedMinutes || 0 }} мин</span></div>
-        <div class="stat">Асфальт: <span>{{ metrics?.bySurface?.ASPHALT || 0 }} км</span></div>
-        <div class="stat">Лесная тропа: <span>{{ metrics?.bySurface?.FOREST_TRAIL || 0 }} км</span></div>
-        <div class="stat">Полевой путь: <span>{{ metrics?.bySurface?.FIELD_PATH || 0 }} км</span></div>
-        <div class="stat">Ж/Д: <span>{{ metrics?.bySurface?.RAILWAY || 0 }} км</span></div>
-        <div class="stat">Черновик: <span>{{ metrics?.preliminaryKm || 0 }} км</span></div>
-        <div class="stat">Окончательный: <span>{{ metrics?.finalKm || 0 }} км</span></div>
+      <section class="panel stats-card">
+        <div class="stat-line"><span class="stat-label">Протяженность:</span> <span class="stat-value">{{ metrics?.totalKm || 0 }} км</span></div>
+        <div class="stat-line"><span class="stat-label">Время:</span> <span class="stat-value">{{ metrics?.estimatedMinutes || 0 }} мин</span></div>
+        <div class="stat-divider"></div>
+        <div class="stat-heading">📊 Детали покрытия:</div>
+        <div class="stat-line">Асфальт: <span class="stat-value">{{ status === 'FINAL' ? (metrics?.bySurface?.ASPHALT || 0) : 0 }} км</span></div>
+        <div class="stat-line">Лесная тропа: <span class="stat-value">{{ status === 'FINAL' ? (metrics?.bySurface?.FOREST_TRAIL || 0) : 0 }} км</span></div>
+        <div class="stat-line">Полевой путь: <span class="stat-value">{{ status === 'FINAL' ? (metrics?.bySurface?.FIELD_PATH || 0) : 0 }} км</span></div>
+        <div class="stat-line">Ж/Д: <span class="stat-value">{{ status === 'FINAL' ? (metrics?.bySurface?.RAILWAY || 0) : 0 }} км</span></div>
+        <div class="stat-divider"></div>
+        <div class="stat-line">Черновик: <span class="stat-value">{{ metrics?.preliminaryKm || 0 }} км</span></div>
+        <div class="stat-line">Окончательный: <span class="stat-value">{{ metrics?.finalKm || 0 }} км</span></div>
       </section>
 
       <div class="panel actions">
-        <button class="primary-btn" @click="saveRoute" :disabled="loading">Сохранить</button>
+        <button class="primary-btn" @click="saveRoute" :disabled="loading || status === 'PRELIMINARY'">Сохранить</button>
         <div class="export-group">
-          <button class="secondary-btn" @click="exportRoute('gpx')">Экспортировать</button>
+          <button class="secondary-btn" @click="exportRoute('gpx')" :disabled="status === 'PRELIMINARY'">Экспортировать</button>
         </div>
       </div>
 

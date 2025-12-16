@@ -33,6 +33,7 @@ import com.maywalk.routes.util.GeoUtils;
 @Service
 public class RouteService {
     private final Map<UUID, Route> routes = new ConcurrentHashMap<>();
+    private final Map<UUID, RouteHistory> histories = new ConcurrentHashMap<>();
 
     public List<Route> findAll() {
         return new ArrayList<>(routes.values());
@@ -45,6 +46,7 @@ public class RouteService {
     public Route save(Route route) {
         route.setUpdatedAt(LocalDateTime.now());
         routes.put(route.getId(), route);
+        pushSnapshot(route);
         return route;
     }
 
@@ -57,18 +59,33 @@ public class RouteService {
         Map<SurfaceType, Double> bySurface = metrics.getBySurface();
         double total = 0;
         double prelim = 0;
+        double finalMeters = 0;
+        boolean finalStatus = route.getStatus() == RouteStatus.FINAL;
         for (RouteSegment segment : route.getSegments()) {
             double segmentMeters = distance(segment.getPoints());
             total += segmentMeters;
             if (segment.isPreliminary()) {
                 prelim += segmentMeters;
             }
-            bySurface.merge(segment.getSurfaceType(), segmentMeters / 1000d, Double::sum);
+            if (finalStatus) {
+                bySurface.merge(segment.getSurfaceType(), segmentMeters / 1000d, Double::sum);
+            }
+            if (!segment.isPreliminary()) {
+                finalMeters += segmentMeters;
+            }
         }
         metrics.setTotalKm(round(total / 1000d));
         metrics.setPreliminaryKm(round(prelim / 1000d));
-        metrics.setEstimatedMinutes(round(minutesBySurface(bySurface)));
+        metrics.setFinalKm(round(finalMeters / 1000d));
+        metrics.setEstimatedMinutes(round(estimateMinutes(total / 1000d, bySurface, finalStatus)));
         return metrics;
+    }
+
+    private double estimateMinutes(double totalKm, Map<SurfaceType, Double> bySurfaceKm, boolean useSurface) {
+        if (!useSurface) {
+            return (totalKm / 4.5) * 60d;
+        }
+        return minutesBySurface(bySurfaceKm);
     }
 
     private double minutesBySurface(Map<SurfaceType, Double> bySurfaceKm) {
@@ -102,6 +119,7 @@ public class RouteService {
         }
         for (RouteSegment segment : route.getSegments()) {
             if (segment.getId().equals(segmentId)) {
+                pushSnapshot(route);
                 segment.getPoints().add(point);
                 route.setUpdatedAt(LocalDateTime.now());
                 return Optional.of(point);
@@ -131,6 +149,35 @@ public class RouteService {
         Route route = routes.get(routeId);
         if (route == null) return Optional.empty();
         return route.getSegments().stream().filter(s -> s.getId().equals(segmentId)).findFirst();
+    }
+
+    public Optional<Route> undo(UUID routeId) {
+        Route route = routes.get(routeId);
+        RouteHistory history = histories.get(routeId);
+        if (route == null || history == null || history.getUndo().size() < 2) {
+            return Optional.empty();
+        }
+        Route current = history.getUndo().pop();
+        history.getRedo().push(cloneRoute(current));
+        Route previous = cloneRoute(history.getUndo().peek());
+        routes.put(routeId, previous);
+        return Optional.of(previous);
+    }
+
+    public Optional<Route> redo(UUID routeId) {
+        RouteHistory history = histories.get(routeId);
+        if (history == null || history.getRedo().isEmpty()) {
+            return Optional.empty();
+        }
+        Route next = cloneRoute(history.getRedo().pop());
+        histories.get(routeId).getUndo().push(cloneRoute(next));
+        routes.put(routeId, next);
+        return Optional.of(next);
+    }
+
+    public RouteMetrics evaluate(List<RouteSegment> segments, RouteStatus status, String name) {
+        Route temp = new Route(name, status, segments);
+        return buildMetrics(temp);
     }
 
     public String exportGpx(Route route) {
@@ -241,5 +288,39 @@ public class RouteService {
 
     private double round(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    private void pushSnapshot(Route route) {
+        RouteHistory history = histories.computeIfAbsent(route.getId(), key -> new RouteHistory());
+        history.getUndo().push(cloneRoute(route));
+        history.getRedo().clear();
+    }
+
+    private Route cloneRoute(Route source) {
+        Route copy = new Route();
+        copy.setId(source.getId());
+        copy.setName(source.getName());
+        copy.setStatus(source.getStatus());
+        copy.setUpdatedAt(source.getUpdatedAt());
+        copy.setSegments(cloneSegments(source.getSegments()));
+        return copy;
+    }
+
+    private List<RouteSegment> cloneSegments(List<RouteSegment> segments) {
+        List<RouteSegment> copy = new ArrayList<>();
+        for (RouteSegment segment : segments) {
+            RouteSegment newSeg = new RouteSegment();
+            newSeg.setId(segment.getId());
+            newSeg.setName(segment.getName());
+            newSeg.setSurfaceType(segment.getSurfaceType());
+            newSeg.setPreliminary(segment.isPreliminary());
+            List<GeoPoint> points = new ArrayList<>();
+            for (GeoPoint p : segment.getPoints()) {
+                points.add(new GeoPoint(p.getLat(), p.getLng(), p.isNode()));
+            }
+            newSeg.setPoints(points);
+            copy.add(newSeg);
+        }
+        return copy;
     }
 }
