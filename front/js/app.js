@@ -109,8 +109,11 @@ const app = Vue.createApp({
     async loadRoutes() {
       const response = await api.get('/routes');
       this.routes = response.data;
-      if (!this.selectedRouteId && this.routes.length) {
+      if (this.routes.length && (!this.selectedRouteId || !this.routes.find(r => r.id === this.selectedRouteId))) {
         this.selectedRouteId = this.routes[0].id;
+      }
+      if (!this.routes.length) {
+        this.selectedRouteId = '';
       }
     },
 
@@ -153,6 +156,7 @@ const app = Vue.createApp({
         this.markSegmentsFinal();
         this.allowAddPoints = false;
         this.setMode('pan');
+        this.drawSegments();
         this.refreshMetricsFromBackend();
       } else {
         this.allowAddPoints = true;
@@ -174,7 +178,7 @@ const app = Vue.createApp({
         this.currentSegment = { name: 'Новый участок', surfaceType: 'FOREST_TRAIL', preliminary: true, points: [] };
         this.activePolyline.setLatLngs([]);
         this.clearActiveMarkers();
-        this.pushHistory();
+        this.drawSegments();
       }
     },
 
@@ -266,15 +270,24 @@ const app = Vue.createApp({
       this.drawnSegments = [];
     },
 
-    clearRoute() {
+    clearRoute(message = 'Маршрут сохранен') {
+      this.restoring = true;
       this.segments = [];
       this.resetSegment();
       this.metrics = null;
-      this.notice = 'Маршрут очищен';
+      this.notice = message;
+      this.routeName = 'Черновик маршрута';
       this.clearRenderedSegments();
       this.status = 'PRELIMINARY';
+      this.restoring = false;
       this.allowAddPoints = true;
       this.setMode('point');
+      this.snapToArchive = true;
+      this.snapToRoads = false;
+      this.showOldRoutes = false;
+      this.updateMapInteraction();
+      this.undoStack = [];
+      this.redoStack = [];
       this.pushHistory();
     },
 
@@ -292,10 +305,9 @@ const app = Vue.createApp({
         };
         const response = await api.post('/routes', payload);
         this.metrics = response.data.metrics;
-        this.notice = 'Маршрут сохранён и проанализирован';
         this.selectedRouteId = response.data.route.id;
         await this.loadRoutes();
-        this.clearRoute();
+        this.clearRoute('Маршрут сохранен');
       } catch (e) {
         this.notice = 'Не удалось сохранить маршрут';
       } finally {
@@ -304,11 +316,12 @@ const app = Vue.createApp({
     },
 
     async openRoute() {
-      if (!this.selectedRouteId && this.routes.length) {
-        this.selectedRouteId = this.routes[0].id;
+      if (!this.selectedRouteId) {
+        this.notice = this.routes.length ? 'Выберите маршрут из списка' : 'Нет сохраненных маршрутов';
+        return;
       }
-      if (!this.selectedRouteId) return;
 
+      this.restoring = true;
       const response = await api.get(`/routes/${this.selectedRouteId}`);
       const loaded = response.data.route;
       this.routeName = loaded.name;
@@ -323,6 +336,9 @@ const app = Vue.createApp({
       this.redoStack = [];
       this.allowAddPoints = this.status !== 'FINAL';
       this.setMode(this.allowAddPoints ? 'point' : 'pan');
+      this.restoring = false;
+      this.updateMapInteraction();
+      this.notice = '';
       this.pushHistory();
     },
 
@@ -423,6 +439,7 @@ const app = Vue.createApp({
         segments: this.cloneSegments(this.segments),
         currentSegment: this.cloneSegment(this.currentSegment),
         status: this.status,
+        routeName: this.routeName,
       };
     },
 
@@ -431,10 +448,19 @@ const app = Vue.createApp({
       this.segments = this.cloneSegments(state.segments);
       this.currentSegment = this.cloneSegment(state.currentSegment);
       this.status = state.status;
+      this.routeName = state.routeName;
       this.restoring = false;
       this.activePolyline.setLatLngs(this.currentSegment.points.map(p => [p.lat, p.lng]));
       this.redrawActiveMarkers();
       this.drawSegments();
+      this.allowAddPoints = this.status !== 'FINAL';
+      if (!this.allowAddPoints && this.mode !== 'pan') {
+        this.setMode('pan');
+      } else if (this.allowAddPoints && this.mode === 'pan') {
+        this.setMode('point');
+      } else {
+        this.updateMapInteraction();
+      }
       if (this.status === 'FINAL') {
         this.refreshMetricsFromBackend();
       } else {
