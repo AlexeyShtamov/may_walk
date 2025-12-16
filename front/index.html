@@ -17,10 +17,7 @@
     <header class="topbar">
       <div class="topbar__left">
         <span class="logo-mark">логотип</span>
-        <div class="title">
-          <span class="title__icon"><i class="fa-solid fa-circle"></i></span>
-          <span class="title__text">МАЙСКАЯ ПРОГУЛКА</span>
-        </div>
+        <div class="title">МАЙСКАЯ ПРОГУЛКА</div>
       </div>
       <div class="topbar__right">
         <button class="ghost-btn" @click="openRoute">
@@ -48,7 +45,7 @@
               <label class="toggle"><input type="checkbox" v-model="snapToRoads" disabled /><span>По дорогам</span></label>
               <label class="toggle"><input type="checkbox" v-model="snapToArchive" /><span>К архиву</span></label>
               <div class="slider-row">
-                <div class="slider-row__label">Вдоль маршрут (расстояние до него) — {{ archiveThreshold }} м</div>
+                <div class="slider-row__label">Вдоль маршрут (расстояние до него) - {{ archiveThreshold }} м</div>
                 <input type="range" min="10" max="120" v-model.number="archiveThreshold" />
               </div>
             </div>
@@ -130,29 +127,6 @@
 
       <!-- КАРТА -->
       <div class="map-wrapper">
-        <div class="map-toolbar">
-          <div class="toolbar-group">
-            <select v-model="tileLayer" @change="setTile(tileLayer)">
-              <option value="osm">OSM</option>
-              <option value="arcgis">ArcGIS</option>
-              <option value="wikimapia">Wikimapia</option>
-              <option value="google">Google</option>
-              <option value="yandex">Yandex</option>
-              <option value="satellite">Спутник</option>
-            </select>
-          </div>
-          <div class="toolbar-group">
-            <button @click="undoPoint" :disabled="!currentSegment.points.length" title="Отменить точку">↶</button>
-            <button @click="redoPoint" :disabled="!undonePoints.length" title="Вернуть точку">↷</button>
-            <button :class="{ active: allowAddPoints }" @click="togglePointMode" title="Режим добавления">✋</button>
-            <button @click="clearRoute" title="Очистить маршрут">✖</button>
-          </div>
-          <div class="toolbar-group">
-            <button @click="zoomIn" title="Приблизить">+</button>
-            <button @click="zoomOut" title="Отдалить">−</button>
-            <button @click="resetView" title="Сброс вида">⟳</button>
-          </div>
-        </div>
         <div id="map"></div>
       </div>
     </div>
