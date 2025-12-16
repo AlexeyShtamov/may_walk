@@ -114,32 +114,53 @@ public class RouteService {
             double minLng = geometry.stream().mapToDouble(GeoPoint::getLng).min().orElse(0);
             double maxLng = geometry.stream().mapToDouble(GeoPoint::getLng).max().orElse(0);
             double padding = 0.0015; // ~150m
-            String query = String.format("[out:json][timeout:25];(way[\"railway\"](%f,%f,%f,%f);way[\"highway\"](%f,%f,%f,%f););out tags geom;",
-                    minLat - padding, minLng - padding, maxLat + padding, maxLng + padding,
+            String bbox = String.format("%f,%f,%f,%f",
                     minLat - padding, minLng - padding, maxLat + padding, maxLng + padding);
+
+            String query = """
+                [out:json][timeout:25];
+                (
+                  // Покрытие местности (полигоны/отношения)
+                  way(%s)["landuse"];
+                  relation(%s)["landuse"];
+            
+                  way(%s)["natural"];
+                  relation(%s)["natural"];
+            
+                  way(%s)["leisure"];
+                  relation(%s)["leisure"];
+            
+                  // Дороги/тропы (fallback)
+                  way(%s)["highway"];
+                  way(%s)["railway"];
+                );
+                out tags center;
+                """.formatted(bbox, bbox, bbox, bbox, bbox, bbox, bbox, bbox);
             JsonNode response = fetchOverpass(query);
             if (response == null || !response.has("elements")) {
                 return SurfaceType.UNKNOWN;
             }
             double bestDistance = Double.MAX_VALUE;
             SurfaceType bestType = SurfaceType.UNKNOWN;
+
             for (JsonNode element : response.get("elements")) {
                 JsonNode tagsNode = element.get("tags");
-                SurfaceType type = SurfaceType.UNKNOWN;
-                if (tagsNode != null) {
-                    type = classifyTags(tagsNode);
-                }
-                if (type == SurfaceType.UNKNOWN) {
-                    continue;
-                }
-                List<GeoPoint> wayGeometry = parseGeometry(element.get("geometry"));
-                double distance = minDistance(geometry, wayGeometry);
-                if (distance < bestDistance) {
-                    bestDistance = distance;
+                if (tagsNode == null) continue;
+
+                SurfaceType type = classifyTags(tagsNode);
+                if (type == SurfaceType.UNKNOWN) continue;
+
+                GeoPoint ref = extractElementPoint(element);
+                if (ref == null) continue;
+
+                double d = minDistanceToPoint(geometry, ref);
+                if (d < bestDistance) {
+                    bestDistance = d;
                     bestType = type;
                 }
             }
-            if (bestDistance < 60) { // meters
+
+            if (bestDistance < 80) { // увеличил порог: для center у полигона логично чуть больше
                 return bestType;
             }
         } catch (Exception ignored) {
@@ -147,21 +168,65 @@ public class RouteService {
         return SurfaceType.UNKNOWN;
     }
 
+    private GeoPoint extractElementPoint(JsonNode element) {
+        // node: lat/lon
+        if (element.has("lat") && element.has("lon")) {
+            return new GeoPoint(element.get("lat").asDouble(), element.get("lon").asDouble(), false);
+        }
+        // way/relation: center: {lat, lon}
+        JsonNode center = element.get("center");
+        if (center != null && center.has("lat") && center.has("lon")) {
+            return new GeoPoint(center.get("lat").asDouble(), center.get("lon").asDouble(), false);
+        }
+        return null;
+    }
+
+    private double minDistanceToPoint(List<GeoPoint> segmentPoints, GeoPoint ref) {
+        double best = Double.MAX_VALUE;
+        for (GeoPoint p : segmentPoints) {
+            best = Math.min(best, GeoUtils.distanceMeters(p, ref));
+        }
+        return best;
+    }
+
     private SurfaceType classifyTags(JsonNode tags) {
+        // 1) Рельсы — отдельно
         if (tags.has("railway")) {
             return SurfaceType.RAILWAY;
         }
+
+        String natural = tags.has("natural") ? tags.get("natural").asText("").toLowerCase() : "";
+        String landuse = tags.has("landuse") ? tags.get("landuse").asText("").toLowerCase() : "";
+        String leisure = tags.has("leisure") ? tags.get("leisure").asText("").toLowerCase() : "";
+
+        // 2) “Местность” (полигоны)
+        if (natural.equals("water") || natural.equals("wetland")) {
+            // если нет отдельного типа — можно оставить UNKNOWN или завести SurfaceType.WATER
+            return SurfaceType.UNKNOWN; // или SurfaceType.WATER если добавишь
+        }
+        if (natural.equals("wood") || landuse.equals("forest")) {
+            return SurfaceType.FOREST_TRAIL; // если нет отдельного FOREST, то хотя бы так
+        }
+        if (leisure.equals("park")) {
+            return SurfaceType.FOREST_TRAIL; // парк чаще ближе к “тропа/грунт”, чем к асфальту
+        }
+
+        // 3) Дороги/поверхность (как было, но аккуратнее)
         String surface = tags.has("surface") ? tags.get("surface").asText("").toLowerCase() : "";
         String highway = tags.has("highway") ? tags.get("highway").asText("").toLowerCase() : "";
-        if (surface.contains("asphalt") || surface.contains("paved")) {
+
+        if (surface.contains("asphalt") || surface.contains("paved") || surface.contains("concrete")) {
             return SurfaceType.ASPHALT;
         }
+
         if (highway.equals("track") || surface.contains("ground") || surface.contains("dirt") || surface.contains("gravel")) {
             return SurfaceType.FIELD_PATH;
         }
+
         if (highway.equals("path") || highway.equals("footway") || highway.equals("bridleway") || highway.equals("cycleway")) {
             return SurfaceType.FOREST_TRAIL;
         }
+
         return SurfaceType.UNKNOWN;
     }
 
@@ -189,15 +254,41 @@ public class RouteService {
     }
 
     private JsonNode fetchOverpass(String query) throws IOException, InterruptedException {
-        var client = java.net.http.HttpClient.newHttpClient();
+        var client = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(java.time.Duration.ofSeconds(10))
+                .build();
+
+        // Overpass самый совместимый формат: data=<urlencoded query>
+        String body = "data=" + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8);
+
         var request = java.net.http.HttpRequest.newBuilder()
                 .uri(java.net.URI.create("https://overpass-api.de/api/interpreter"))
-                .header("Content-Type", "text/plain")
-                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(query))
+                .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+                .header("Accept", "application/json")
+                .timeout(java.time.Duration.ofSeconds(30))
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
                 .build();
-        var response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() >= 200 && response.statusCode() < 300) {
-            return mapper.readTree(response.body());
+
+        // простой retry на 429/5xx
+        for (int attempt = 0; attempt < 3; attempt++) {
+            var response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            int code = response.statusCode();
+
+            if (code >= 200 && code < 300) {
+                return mapper.readTree(response.body());
+            }
+
+            if (code == 429 || (code >= 500 && code < 600)) {
+                try {
+                    Thread.sleep(300L * (attempt + 1));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw ie;
+                }
+                continue;
+            }
+
+            return null;
         }
         return null;
     }
