@@ -13,56 +13,97 @@
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+  <div id="app">
+    <header class="topbar">
+      <div class="logo">
+        <strong>МАЙСКАЯ ПРОГУЛКА</strong>
+      </div>
+      <div class="top-actions">
+        <select v-model="selectedRouteId" @change="openRoute">
+          <option disabled value="">Открыть сохранённый маршрут</option>
+          <option v-for="route in routes" :key="route.id" :value="route.id">{{ route.name }}</option>
+        </select>
+        <button class="top-btn" @click="saveRoute" :disabled="loading">Сохранить маршрут</button>
+      </div>
+    </header>
 
-<header class="topbar">
-  <div class="logo">
-    <strong>МАЙСКАЯ ПРОГУЛКА</strong>
+    <div class="layout">
+      <!-- ЛЕВАЯ ПАНЕЛЬ -->
+      <aside class="sidebar">
+        <section>
+          <h4>Название и статус</h4>
+          <input v-model="routeName" class="input" placeholder="Название маршрута" />
+          <select v-model="status" class="input">
+            <option value="PRELIMINARY">Предварительный</option>
+            <option value="FINAL">Окончательный</option>
+          </select>
+        </section>
+
+        <section>
+          <h4>Привязка</h4>
+          <label><input type="checkbox" v-model="snapToArchive"> К архиву</label>
+          <label><input type="checkbox" v-model="snapToRoads" disabled> К дорогам (заглушка)</label>
+          <label class="small">Радиус привязки: {{ archiveThreshold }} м</label>
+          <input type="range" min="10" max="100" v-model.number="archiveThreshold" />
+        </section>
+
+        <section>
+          <h4>Текущий участок</h4>
+          <input v-model="currentSegment.name" class="input" />
+          <label>Покрытие</label>
+          <select v-model="currentSegment.surfaceType" class="input">
+            <option value="ASPHALT">Асфальт</option>
+            <option value="FOREST_TRAIL">Лесная тропа</option>
+            <option value="FIELD_PATH">Полевой путь</option>
+            <option value="RAILWAY">Ж/Д</option>
+            <option value="UNKNOWN">Неизвестно</option>
+          </select>
+          <label><input type="checkbox" v-model="currentSegment.preliminary"> Предварительный вариант</label>
+          <button class="btn" @click="addSegment" :disabled="currentSegment.points.length===0">Закрепить участок</button>
+          <div class="hint">Кликай по карте, чтобы добавить точки. Узлы ставятся отдельно через редактирование после сохранения.</div>
+        </section>
+
+        <section>
+          <h4>Сегменты в маршруте</h4>
+          <ul class="segments">
+            <li v-for="(segment, index) in segments" :key="segment.id">
+              <div>
+                <strong>{{ segment.name }}</strong> — {{ segment.surfaceType }}
+                <span class="chip" :class="segment.preliminary ? 'chip-draft' : 'chip-final'">{{ segment.preliminary ? 'Черновик' : 'Финал' }}</span>
+              </div>
+              <button class="link" @click="removeSegment(index)">Удалить</button>
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h4>О маршруте</h4>
+          <div class="info" v-if="metrics">
+            <div>Протяжённость: <strong>{{ metrics.totalKm }} км</strong></div>
+            <div>Черновик: {{ metrics.preliminaryKm }} км</div>
+            <div>Оценка времени: {{ metrics.estimatedMinutes }} мин</div>
+          </div>
+          <div class="info" v-else>Нет данных. Добавьте точки на карте.</div>
+        </section>
+
+        <section>
+          <h4>Экспорт</h4>
+          <button class="btn secondary" @click="exportRoute('gpx')">GPX</button>
+          <button class="btn secondary" @click="exportRoute('kml')">KML</button>
+          <button class="btn secondary" @click="exportRoute('kmz')">KMZ</button>
+        </section>
+
+        <div class="notice" v-if="notice">{{ notice }}</div>
+      </aside>
+
+      <!-- КАРТА -->
+      <div id="map"></div>
+    </div>
   </div>
-  <button class="top-btn">Загрузить маршрут</button>
-</header>
 
-<div class="layout">
-  <!-- ЛЕВАЯ ПАНЕЛЬ -->
-  <aside class="sidebar">
-    <section>
-      <h4>Режим</h4>
-      <label><input type="radio" name="mode" checked> Свободный</label>
-      <label><input type="radio" name="mode"> Точечный</label>
-    </section>
-
-    <section>
-      <h4>Привязка</h4>
-      <label><input type="checkbox"> К дорогам</label>
-      <label><input type="checkbox"> К архиву</label>
-    </section>
-
-    <section>
-      <h4>О текущем маршруте</h4>
-      <div class="info">
-        <div>Статус: <strong>Предварительный</strong></div>
-        <div>Протяжённость: <span id="distance">0</span> км</div>
-        <div>Время: 0 мин</div>
-      </div>
-    </section>
-
-    <section>
-      <h4>Детали покрытия</h4>
-      <div class="info">
-        Асфальт: 0 км<br/>
-        Лесная тропа: 0 км<br/>
-        Полевой путь: 0 км
-      </div>
-    </section>
-
-    <button class="btn">Сохранить</button>
-    <button class="btn secondary">Экспортировать</button>
-  </aside>
-
-  <!-- КАРТА -->
-  <div id="map"></div>
-</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="js/map.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.21/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
