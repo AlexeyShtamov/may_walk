@@ -22,6 +22,11 @@
       </div>
     </div>
     <div class="topbar__right">
+      <div class="mode-switcher">
+        <button class="mode-btn" :class="{ active: mode === 'point' }" @click="setMode('point')" title="Точечный режим">⚪️</button>
+        <button class="mode-btn" :class="{ active: mode === 'free' }" @click="setMode('free')" title="Свободный режим">✏️</button>
+        <button class="mode-btn" :class="{ active: mode === 'pan' }" @click="setMode('pan')" title="Перемещение карты">🤚</button>
+      </div>
       <button class="primary-btn" @click="openRoute">
         <i class="fa-solid fa-cloud-arrow-up"></i>
         Загрузить маршрут
@@ -32,14 +37,6 @@
   <div class="workspace">
     <!-- ЛЕВАЯ ПАНЕЛЬ -->
     <aside class="sidebar">
-      <section class="panel">
-        <div class="panel__header">Режим</div>
-        <div class="panel__row">
-          <label class="radio"><input type="radio" value="free" v-model="mode" /> Свободный</label>
-          <label class="radio"><input type="radio" value="point" v-model="mode" /> Точечный</label>
-        </div>
-      </section>
-
       <section class="panel">
         <div class="panel__header">Привязка</div>
         <div class="panel__content">

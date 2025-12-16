@@ -27,7 +27,7 @@ const app = Vue.createApp({
       selectedRouteId: null,
       loading: false,
       notice: '',
-      mode: 'free',
+      mode: 'point',
       showOldRoutes: false,
       focusOnRoute: false,
       coverageMode: 'none',
@@ -52,6 +52,7 @@ const app = Vue.createApp({
     this.map.on('mousedown', this.handleMouseDown);
     this.map.on('mousemove', this.handleMouseMove);
     this.map.on('mouseup', this.handleMouseUp);
+    this.updateMapInteraction();
     this.loadRoutes();
   },
   methods: {
@@ -114,12 +115,28 @@ const app = Vue.createApp({
       this.clearActiveMarkers();
     },
 
-    togglePointMode() {
-      this.allowAddPoints = !this.allowAddPoints;
-      this.notice = this.allowAddPoints ? 'Режим добавления точек включён' : 'Добавление точек временно отключено';
+    setMode(newMode) {
+      const allowed = ['point', 'free', 'pan'];
+      if (!allowed.includes(newMode)) return;
+      this.mode = newMode;
+      this.isDrawing = false;
+      this.skipNextClick = false;
+      this.updateMapInteraction();
+    },
+
+    updateMapInteraction() {
+      if (!this.map) return;
+      if (this.mode === 'pan') {
+        this.map.dragging.enable();
+        this.map.keyboard.enable();
+      } else {
+        this.map.dragging.disable();
+        this.map.keyboard.disable();
+      }
     },
 
     async handleMapClick(e) {
+      if (this.mode === 'pan') return;
       if (this.mode === 'free') {
         if (this.skipNextClick) {
           this.skipNextClick = false;
@@ -265,11 +282,11 @@ const app = Vue.createApp({
     },
 
     createPointMarkers(points, color) {
-      const radius = 6;
+      const radius = 4;
       return points.map(p => L.circleMarker([p.lat, p.lng], {
         radius,
         color,
-        weight: 3,
+        weight: 2,
         fillColor: color,
         fillOpacity: 0.85,
       }));
