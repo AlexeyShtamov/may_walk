@@ -1,4 +1,15 @@
-const api = axios.create({ baseURL: 'https://may-walk-backend.onrender.com' });
+const apiBaseUrl = (() => {
+  const meta = document.querySelector('meta[name="api-base-url"]');
+  if (meta && meta.content) {
+    return meta.content;
+  }
+  if (window.API_BASE_URL) {
+    return window.API_BASE_URL;
+  }
+  return 'http://localhost:8080/api';
+})();
+
+const api = axios.create({ baseURL: apiBaseUrl });
 
 const app = Vue.createApp({
   data() {
