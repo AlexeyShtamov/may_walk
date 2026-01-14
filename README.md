@@ -18,6 +18,37 @@
    ```
    Откройте `http://localhost:3000` в браузере. Фронтенд общается с API по адресу `http://localhost:8080`.
 
+## Бесплатный деплой (пример: Render + Netlify)
+
+Ниже — самый простой вариант разделённого деплоя: backend на Render, frontend на Netlify. Можно выбрать альтернативы (Railway/Fly.io, GitHub Pages/Cloudflare Pages), но шаги будут похожими.
+
+### Backend на Render
+
+1. Создайте аккаунт на [render.com](https://render.com).
+2. Нажмите **New + → Web Service** и подключите репозиторий.
+3. Укажите:
+   - **Root Directory**: `back`
+   - **Build Command**: `mvn -q -DskipTests package`
+   - **Start Command**: `java -jar target/*.jar`
+   - **Environment**: `Java`
+4. После деплоя получите URL вида `https://<имя-сервиса>.onrender.com`.
+5. Проверьте API: `https://<имя-сервиса>.onrender.com/api/routes`.
+
+### Frontend на Netlify
+
+1. Создайте аккаунт на [netlify.com](https://www.netlify.com).
+2. Нажмите **Add new site → Import from Git** и выберите репозиторий.
+3. Укажите:
+   - **Base directory**: `front`
+   - **Build command**: пусто (статический сайт)
+   - **Publish directory**: `front`
+4. После деплоя получите URL вида `https://<имя>.netlify.app`.
+5. В файле `front/index.html` задайте URL backend-а в `<meta name="api-base-url">`, например:
+   ```html
+   <meta name="api-base-url" content="https://<имя-сервиса>.onrender.com/api" />
+   ```
+   После изменения — новый деплой.
+
 ## Что умеет приложение
 
 - Рисование маршрута по точкам на карте OSM, фиксация участков с типом покрытия и статусом «черновик»/«финал».
